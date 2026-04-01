@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Локальная конфигурация (порт и секреты)
+.env
+.env.local
+.env.*.local
+
+# Logs & debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / редактор
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Сборки и кэш
+dist/
+build/
+.cache/
+*.tsbuildinfo
+
+# Docker (опционально локальные оверлеи)
+docker-compose.override.yml
