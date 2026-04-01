@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZiTeg — Парсер VAST тегов</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css" crossorigin="anonymous" />
+</head>
+<body>
+
+  <div class="bg-vline"      aria-hidden="true"></div>
+  <div class="bg-side-left"  aria-hidden="true"></div>
+  <div class="bg-side-right" aria-hidden="true"></div>
+
+  <!-- ══ TOP BAR ══════════════════════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo-wrap">
+        <img src="logo.png" alt="ZiTeg" width="48" height="48" class="logo" />
+      </div>
+      <div class="brand">
+        <span class="brand-name">ZiTech</span>
+      </div>
+      <span class="badge">v1.0</span>
+    </div>
+
+    <div class="topbar-center">
+      <div class="tab-nav-inner">
+        <button class="tab-btn active" data-tab="ziteg">
+          <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          ZiTeg
+          <span class="tab-chip">Парсер</span>
+        </button>
+        <button class="tab-btn" data-tab="zichecker">
+          <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          ZiChecker
+          <span class="tab-chip">Валидатор</span>
+        </button>
+        <button class="tab-btn" data-tab="vasthelp">
+          <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Справка
+          <span class="tab-chip">VAST</span>
+        </button>
+        <div class="tab-indicator" id="tab-indicator"></div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div class="theme-strip" id="theme-strip" role="group" aria-label="Цветовая тема">
+        <span class="theme-strip-label">Тема</span>
+        <button type="button" class="theme-swatch" data-theme-preset="ember" aria-label="Рубин — тёмно-красная" title="Рубин"></button>
+        <button type="button" class="theme-swatch" data-theme-preset="depth" aria-label="Глубина — синяя тёмная" title="Глубина"></button>
+        <button type="button" class="theme-swatch" data-theme-preset="obsidian" aria-label="Обсидиан — тёмно-чёрная" title="Обсидиан"></button>
+        <button type="button" class="theme-swatch" data-theme-preset="frost" aria-label="Иней — светлая холодная" title="Иней"></button>
+        <button type="button" class="theme-swatch" data-theme-preset="silver" aria-label="Серебро — светло-серая" title="Серебро"></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══ TAB: ZiTeg ════════════════════════════════════════ -->
+  <div class="tab-panel active" id="panel-ziteg">
+
+    <!-- Stats bar -->
+    <div class="ziteg-stats hidden" id="ziteg-stats">
+      <div class="ziteg-stats-inner">
+        <div class="ts" id="ts-params">
+          <span class="ts-v" id="ts-params-val">0</span>
+          <span class="ts-l">параметры</span>
+        </div>
+        <div class="ts" id="ts-macros">
+          <span class="ts-v cyan" id="ts-macros-val">0</span>
+          <span class="ts-l">макросы</span>
+        </div>
+        <div class="ts" id="ts-disabled">
+          <span class="ts-v dim" id="ts-disabled-val">0</span>
+          <span class="ts-l">откл.</span>
+        </div>
+        <div class="ts-sep"></div>
+        <div class="ts" id="ts-status">
+          <span class="ts-v green" id="ts-status-val">ОК</span>
+          <span class="ts-l">статус</span>
+        </div>
+      </div>
+    </div>
+
+    <main class="main">
+
+      <!-- INPUT BLOCK -->
+      <div class="input-block" id="input-block">
+        <div class="input-head">
+          <span class="section-label">VAST ТЕГ</span>
+          <div class="input-controls">
+            <kbd class="kbd kbd-hint">⌘↵</kbd>
+            <button class="btn ghost sm" id="btn-clear">Очистить</button>
+            <button class="btn primary" id="btn-parse">
+              <svg width="9" height="9" viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" fill="currentColor"/></svg>
+              Парсить
+            </button>
+          </div>
+        </div>
+        <textarea
+          id="vast-input"
+          class="vast-input"
+          placeholder="Вставьте VAST тег: https://ads.example.com/vast?bundle={app}&ip={ip}&ua={ua}&ifa={gaid}&w=640&h=360..."
+          spellcheck="false"
+        ></textarea>
+      </div>
+
+      <aside class="hist-panel" id="hist-panel" data-collapse-key="hist" aria-label="Недавние VAST теги">
+        <div class="hist-panel-head">
+          <span class="section-label">Недавние теги</span>
+          <div class="panel-head-actions">
+            <button type="button" class="btn ghost sm" id="hist-clear-all">Очистить список</button>
+            <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть" aria-label="Свернуть блок недавних тегов">
+              <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="collapsible-body">
+          <div class="hist-list" id="hist-list"></div>
+        </div>
+      </aside>
+
+      <!-- VALIDATION -->
+      <div id="val-bar" class="val-bar hidden"></div>
+
+      <!-- RESULT BLOCK -->
+      <div id="result-section" class="result hidden">
+
+        <!-- BASE URL ROW -->
+        <div class="base-row">
+          <span class="base-lbl">BASE</span>
+          <input class="base-inp" id="base-url-input" type="text" spellcheck="false" placeholder="https://…" />
+          <button class="btn-icon-only" id="btn-copy-base" title="Копировать базовый URL">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+
+        <!-- PARAMS TABLE -->
+        <div class="table-wrap" data-collapse-key="params">
+          <div class="table-head-bar">
+            <span class="section-label">ПАРАМЕТРЫ</span>
+            <div class="table-actions">
+              <button class="btn ghost sm" id="btn-add-param">+ Добавить</button>
+              <button class="btn ghost sm" id="btn-sort">Сортировка А–Я</button>
+              <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть таблицу" aria-label="Свернуть блок параметров">
+                <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="collapsible-body">
+            <div class="table-scroll">
+              <table class="ptable">
+                <thead>
+                  <tr>
+                    <th class="c-on">Вкл</th>
+                    <th class="c-num">#</th>
+                    <th class="c-key">Параметр</th>
+                    <th class="c-val">Значение</th>
+                    <th class="c-type">Тип</th>
+                    <th class="c-note">Описание</th>
+                    <th class="c-del"></th>
+                  </tr>
+                </thead>
+                <tbody id="params-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /result -->
+    </main>
+  </div><!-- /panel-ziteg -->
+
+  <!-- ══ TAB: ZiChecker ════════════════════════════════════ -->
+  <div class="tab-panel" id="panel-zichecker">
+    <div class="chk-main">
+
+      <!-- INPUT -->
+      <div class="chk-input-block">
+        <div class="chk-input-head">
+          <div class="chk-mode-tabs">
+            <button class="chk-mode-btn active" id="chk-mode-url" data-mode="url">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              По URL
+            </button>
+            <button class="chk-mode-btn" id="chk-mode-xml" data-mode="xml">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              Только XML
+            </button>
+          </div>
+          <div class="input-controls">
+            <button class="btn ghost sm" id="chk-btn-clear">Очистить</button>
+            <button class="btn primary" id="chk-btn-parse">
+              <svg width="9" height="9" viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" fill="currentColor"/></svg>
+              Анализировать
+            </button>
+          </div>
+        </div>
+
+        <div class="chk-url-section">
+          <span class="chk-col-label">Ссылка VAST</span>
+          <div class="chk-url-wrap" id="chk-url-wrap">
+            <div class="chk-url-row">
+              <span class="chk-url-prefix">URL</span>
+              <input id="chk-url-input" class="chk-url-input" type="text"
+                placeholder="https://cdn.example.com/vast.xml"
+                spellcheck="false" autocomplete="off" />
+            </div>
+          </div>
+        </div>
+
+        <p class="chk-mode-hint" id="chk-mode-hint">Кнопка «Анализировать» загружает VAST по ссылке выше; ответ появляется в XML ниже.</p>
+
+        <div class="chk-xml-panel" id="chk-xml-panel">
+          <div class="chk-xml-panel-head">
+            <div class="chk-xml-panel-head-left">
+              <span class="chk-xml-panel-title">XML</span>
+              <span class="chk-xml-panel-sub">просмотр и правка</span>
+            </div>
+            <button type="button" class="chk-xml-toggle" id="chk-xml-toggle" aria-expanded="true"
+              title="Свернуть или развернуть редактор XML" aria-controls="chk-xml-panel-body">
+              <svg class="chk-xml-toggle-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><polyline points="6 15 12 9 18 15"/></svg>
+              <span class="chk-xml-toggle-text">Свернуть</span>
+            </button>
+          </div>
+          <div class="chk-xml-panel-body" id="chk-xml-panel-body">
+            <div class="chk-xml-wrap" id="chk-xml-wrap">
+              <div class="xml-editor-toolbar">
+                <button type="button" class="btn ghost sm" id="chk-xml-format">Форматировать</button>
+                <button type="button" class="btn ghost sm" id="chk-xml-validate">Проверить XML</button>
+                <span class="kbd kbd-hint">Tab</span>
+                <span class="kbd kbd-hint">⌘↵</span>
+                <span class="xml-editor-status" id="chk-xml-status" aria-live="polite"></span>
+              </div>
+              <textarea id="chk-xml-input" class="vast-input chk-textarea chk-xml-editor"
+                placeholder="<?xml version=&quot;1.0&quot;?>&#10;<VAST version=&quot;4.2&quot;>&#10;  …&#10;</VAST>"
+                spellcheck="false" wrap="off"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESULTS (hidden until parse) -->
+      <div id="chk-results" class="chk-results hidden">
+
+        <!-- SUMMARY + VAL -->
+        <div class="chk-summary" id="chk-summary"></div>
+        <div id="chk-val-bar" class="val-bar hidden"></div>
+
+        <div class="chk-card chk-spec-card" data-collapse-key="spec">
+          <div class="chk-card-head chk-card-head-toggle">
+            <span class="section-label">ВЕРСИЯ VAST И СТРУКТУРА</span>
+            <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть" aria-label="Свернуть блок версии VAST">
+              <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </div>
+          <div class="chk-card-body">
+            <div class="chk-spec-body" id="chk-spec-body"></div>
+          </div>
+        </div>
+
+        <!-- ROW 1: Player (left) + Live Feed (right) -->
+        <div class="chk-row1">
+
+          <!-- Player -->
+          <div class="chk-card chk-player-card" data-collapse-key="player">
+            <div class="chk-card-head player-card-head">
+              <div class="player-head-left">
+                <span class="section-label">ПЛЕЕР</span>
+                <span class="player-badge" id="player-badge">ОЖИДАНИЕ</span>
+                <span class="player-format-badge hidden" id="player-format-badge" title=""></span>
+              </div>
+              <div class="player-head-right">
+                <label class="player-source-label hidden" id="player-source-label" for="player-source-select">Источник</label>
+                <select id="player-source-select" class="player-source-select hidden" aria-label="Выбор MediaFile"></select>
+                <span class="player-time" id="player-time">0:00 / 0:00</span>
+                <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть плеер" aria-label="Свернуть блок плеера">
+                  <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="chk-card-body">
+            <div class="player-video-wrap" id="player-video-wrap" tabindex="0" role="region" aria-label="Видеоплеер. Пробел — пауза, стрелки — перемотка">
+              <video id="chk-video" preload="metadata" playsinline></video>
+              <div class="player-overlay" id="player-overlay">
+                <button class="player-big-play" id="player-big-play">
+                  <svg width="24" height="24" viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" fill="currentColor"/></svg>
+                </button>
+              </div>
+              <div class="player-vpaid-note hidden" id="player-vpaid-note">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 9v4m0 4h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                VPAID — прямое воспроизведение недоступно в браузере
+              </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="player-progress-wrap">
+              <div class="player-progress-pad">
+                <div class="player-progress-bg" id="player-progress-bg">
+                  <div class="player-progress-fill" id="player-progress-fill"></div>
+                  <div class="player-quartile-mark" style="left:25%"><span>25%</span></div>
+                  <div class="player-quartile-mark" style="left:50%"><span>50%</span></div>
+                  <div class="player-quartile-mark" style="left:75%"><span>75%</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="player-controls">
+              <button class="player-ctrl-btn" id="ctrl-play" title="Play / Pause (пробел при фокусе на видео)">
+                <svg id="ctrl-play-icon" width="14" height="14" viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" fill="currentColor"/></svg>
+              </button>
+              <button class="player-ctrl-btn" id="ctrl-seek-back" type="button" title="Назад 10 с (←)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 19 2 12 11 5 11 19"/><line x1="22" y1="19" x2="22" y2="5"/></svg>
+              </button>
+              <button class="player-ctrl-btn" id="ctrl-seek-fwd" type="button" title="Вперёд 10 с (→)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 19 22 12 13 5 13 19"/><line x1="2" y1="19" x2="2" y2="5"/></svg>
+              </button>
+              <button class="player-ctrl-btn" id="ctrl-mute" title="Mute / Unmute">
+                <svg id="ctrl-mute-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              </button>
+              <input type="range" class="player-vol" id="ctrl-vol" min="0" max="1" step="0.05" value="1" title="Volume" />
+              <div class="player-ctrl-spacer"></div>
+              <button class="player-ctrl-btn" id="ctrl-fullscreen" title="Имитировать Fullscreen">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              </button>
+              <button class="player-ctrl-btn" id="ctrl-skip" title="Имитировать Skip">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+              </button>
+              <button class="player-ctrl-btn" id="ctrl-click" title="Имитировать Click Through">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+              </button>
+            </div>
+            </div><!-- /chk-card-body player -->
+          </div>
+
+          <div class="chk-row1-aside">
+            <!-- Live event feed -->
+            <div class="chk-card chk-feed-card" data-collapse-key="feed">
+              <div class="chk-card-head chk-feed-card-head">
+                <div class="chk-feed-head-left">
+                  <span class="section-label">ЖИВЫЕ СОБЫТИЯ</span>
+                  <span class="feed-live-dot" id="feed-live-dot"></span>
+                </div>
+                <div class="chk-card-head-actions">
+                  <button type="button" class="player-feed-clear" id="player-feed-clear">очистить</button>
+                  <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть" aria-label="Свернуть блок живых событий">
+                    <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="chk-card-body">
+              <div class="player-feed-list" id="player-feed-list">
+                <div class="player-feed-empty" id="player-feed-empty">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Запустите воспроизведение
+                </div>
+              </div>
+              </div>
+            </div>
+
+            <!-- Media files (под живыми событиями) -->
+            <div class="chk-card chk-media-card" data-collapse-key="media">
+              <div class="chk-card-head chk-card-head-toggle">
+                <span class="section-label">МЕДИАФАЙЛЫ</span>
+                <div class="chk-card-head-actions">
+                  <span class="chk-count" id="chk-media-count">0</span>
+                  <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть" aria-label="Свернуть список медиа">
+                    <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="chk-card-body">
+                <div class="chk-media-list" id="chk-media-list"></div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /chk-row1 -->
+
+        <!-- ROW 2: Flow + Trackers -->
+        <div class="chk-row2">
+
+          <div class="chk-card" data-collapse-key="flow">
+            <div class="chk-card-head chk-card-head-toggle">
+              <span class="section-label">СХЕМА СОБЫТИЙ</span>
+              <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть" aria-label="Свернуть схему событий">
+                <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+            <div class="chk-card-body">
+              <div class="chk-flow" id="chk-flow"></div>
+            </div>
+          </div>
+
+          <div class="chk-card" data-collapse-key="trackers">
+            <div class="chk-card-head chk-card-head-toggle">
+              <span class="section-label">ТРЕКЕРЫ</span>
+              <div class="chk-card-head-actions">
+                <span class="chk-count" id="chk-tracker-count">0</span>
+                <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть" aria-label="Свернуть список трекеров">
+                  <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="chk-card-body">
+              <div class="chk-tracker-list" id="chk-tracker-list"></div>
+            </div>
+          </div>
+
+        </div><!-- /chk-row2 -->
+
+        <!-- ROW 3: Diagnostics + Compliance -->
+        <div class="chk-row3">
+
+          <div class="chk-card" data-collapse-key="diag">
+            <div class="chk-card-head chk-card-head-toggle">
+              <span class="section-label">ДИАГНОСТИКА</span>
+              <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть" aria-label="Свернуть диагностику">
+                <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+            <div class="chk-card-body">
+              <div id="chk-diag-result" class="chk-diag-result"></div>
+            </div>
+          </div>
+
+          <div class="chk-card" data-collapse-key="compliance">
+            <div class="chk-card-head chk-card-head-toggle">
+              <span class="section-label">COMPLIANCE</span>
+              <div class="chk-card-head-actions">
+                <span class="chk-count" id="chk-compliance-count">0</span>
+                <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть" aria-label="Свернуть compliance">
+                  <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="chk-card-body">
+              <div id="chk-compliance-list" class="chk-compliance-list"></div>
+            </div>
+          </div>
+
+        </div><!-- /chk-row3 -->
+
+      </div><!-- /chk-results -->
+
+    </div>
+  </div><!-- /panel-zichecker -->
+
+  <!-- ══ TAB: Справка VAST ═══════════════════════════════════ -->
+  <div class="tab-panel" id="panel-vasthelp">
+    <main class="vast-help-main">
+      <div class="vast-help-inner">
+        <h1 class="vast-help-title">Справка по VAST и интеграциям</h1>
+        <p class="vast-help-lead">Краткая сводка по версиям IAB Video Ad Serving Template, типичным атрибутам и ожиданиям плееров (в т.ч. IMA/SDK). Не заменяет официальную спецификацию IAB.</p>
+
+        <section class="vast-ref-section">
+          <h2>Версии VAST (обзор)</h2>
+          <div class="table-scroll vast-ref-scroll">
+            <table class="vast-ref-table">
+              <thead><tr><th>Версия</th><th>Ключевые особенности</th></tr></thead>
+              <tbody>
+                <tr><td>2.0</td><td>Базовый линейный креатив, Impression, Tracking, ClickThrough, Error; без формального skip offset в Linear.</td></tr>
+                <tr><td>3.0</td><td>Skip (<code>skipoffset</code> на Linear), расширенные события, AdParameters, больше гибкости для mobile.</td></tr>
+                <tr><td>4.0+</td><td>UniversalAdId, AdVerifications (OMID), Mezzanine, Pricing, InteractiveCreativeFile (SIMID), AdServingId, уточнения для CTV/адресуемости.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="vast-ref-section">
+          <h2>Атрибут <code>event</code> у <code>&lt;Tracking&gt;</code> (IAB, линейная реклама)</h2>
+          <p class="vast-ref-note">Полный перечень и нюансы — в спецификации IAB. Ниже часто встречающиеся значения для прогресса и взаимодействия.</p>
+          <div class="table-scroll vast-ref-scroll">
+            <table class="vast-ref-table">
+              <thead><tr><th>event</th><th>Назначение</th></tr></thead>
+              <tbody>
+                <tr><td><code>start</code>, <code>firstQuartile</code>, <code>midpoint</code>, <code>thirdQuartile</code>, <code>complete</code></td><td>Квартильная схема воспроизведения.</td></tr>
+                <tr><td><code>mute</code>, <code>unmute</code>, <code>pause</code>, <code>resume</code></td><td>Громкость и пауза.</td></tr>
+                <tr><td><code>fullscreen</code>, <code>exitFullscreen</code></td><td>Полноэкранный режим.</td></tr>
+                <tr><td><code>skip</code></td><td>Пропуск объявления (актуально с VAST 3+ и поддержкой skip в креативе).</td></tr>
+                <tr><td><code>progress</code></td><td>С прогрессом по <code>offset</code> (например <code>00:00:05.000</code> или <code>50%</code>).</td></tr>
+                <tr><td><code>creativeView</code></td><td>Просмотр креатива (non-linear / отдельные сценарии).</td></tr>
+                <tr><td><code>acceptInvitation</code>, <code>close</code>, <code>collapse</code>, <code>expand</code></td><td>Non-linear / expandable.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="vast-ref-section">
+          <h2><code>MediaFile</code>: <code>type</code> и <code>delivery</code></h2>
+          <div class="table-scroll vast-ref-scroll">
+            <table class="vast-ref-table">
+              <thead><tr><th>Поле</th><th>Типичные значения</th></tr></thead>
+              <tbody>
+                <tr><td><code>type</code> (MIME)</td><td><code>video/mp4</code>, <code>video/webm</code>, <code>application/javascript</code> (VPAID), <code>application/vnd.apple.mpegurl</code> (HLS).</td></tr>
+                <tr><td><code>delivery</code></td><td><code>progressive</code> — файл по HTTP; <code>streaming</code> — поток (HLS/DASH и т.п., зависит от плеера).</td></tr>
+                <tr><td><code>apiFramework</code></td><td><code>VPAID</code>, <code>MRAID</code> и др. — указывает интерактивный API поверх видео.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="vast-ref-section">
+          <h2>Коды <code>&lt;Error&gt;</code> (фрагмент IAB)</h2>
+          <p class="vast-ref-note">URL в Error часто дополняется макросом <code>[ERRORCODE]</code>. Ниже распространённые коды; полный список — в документе IAB VAST.</p>
+          <div class="table-scroll vast-ref-scroll">
+            <table class="vast-ref-table col-code">
+              <thead><tr><th>Код</th><th>Смысл (кратко)</th></tr></thead>
+              <tbody>
+                <tr><td>100–102</td><td>Ошибка разбора XML / валидации VAST.</td></tr>
+                <tr><td>200–203</td><td>Проблемы воспроизведения медиа (не найдено, неподдерживаемый тип и т.д.).</td></tr>
+                <tr><td>300–303</td><td>Timeout / недоступность ресурсов.</td></tr>
+                <tr><td>400–403</td><td>Ошибки враппера / цепочки VAST.</td></tr>
+                <tr><td>600–603</td><td>Ошибки интерактива / VPAID / несовместимости.</td></tr>
+                <tr><td>900–901</td><td>Общая / неизвестная ошибка.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="vast-ref-section">
+          <h2>Google IMA SDK и макросы</h2>
+          <p>IMA подставляет макросы в URL трекеров (например время просмотра, причина пропуска). Имена макросов зависят от версии SDK и документации Google; при отладке сравнивайте фактический запрос с шаблоном в VAST.</p>
+        </section>
+
+        <section class="vast-ref-section">
+          <h2>OMID / SIMID</h2>
+          <ul class="vast-ref-list">
+            <li><strong>Open Measurement (OMID)</strong> — верифицируемые показы через <code>AdVerifications</code> / ресурсы OMSDK; типично для VAST 4.x и измеримости.</li>
+            <li><strong>SIMID</strong> — интерактив поверх видео через <code>InteractiveCreativeFile</code> и API SIMID; смена устаревшего VPAID в ряде сценариев.</li>
+          </ul>
+        </section>
+
+        <section class="vast-ref-section">
+          <h2>CTV и ограничения плееров</h2>
+          <p>На телевизорах и приставках часто нет полноценного JS/VPAID: отдавайте <code>video/mp4</code> (progressive или поддерживаемый стриминг), избегайте зависимости от VPAID, проверяйте разрешения и битрейт под большой экран.</p>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- ══ STICKY OUTPUT BAR ═════════════════════════════════ -->
+  <div class="out-bar hidden" id="out-bar">
+    <div class="out-bar-inner">
+      <div class="out-url-wrap">
+        <span class="out-label">URL</span>
+        <div class="out-url" id="output-url"></div>
+      </div>
+      <div class="out-actions">
+        <button class="btn ghost out-btn" id="btn-copy-url">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy URL
+        </button>
+        <button class="btn ghost out-btn" id="btn-copy-encoded">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Encoded
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/xml/xml.js" crossorigin="anonymous"></script>
+  <script src="app.js"></script>
+  <script src="checker.js"></script>
+</body>
+</html>
