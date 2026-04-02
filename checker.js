@@ -818,7 +818,7 @@ async function resolveWrapperChain(initialXml, /** @type {Array<{level:string,ms
     if (data.error) return { ...data, chain };
 
     if (data.adType === 'Wrapper') {
-      chain.push({ type: 'Wrapper', depth });
+      chain.push({ type: 'Wrapper', depth, wrapperUrl: data.wrapperUrl });
       // Accumulate tracking events from this wrapper level
       mergeEventMaps(inheritedEvents, data.eventMap);
 
@@ -893,6 +893,37 @@ function renderSummary(data) {
   html += chips.map(c =>
     `<div class="chk-chip ${c.cls}"><span class="chk-chip-lbl">${c.label}</span>${escChk(c.val)}</div>`
   ).join('');
+
+  const infra = data.adInfra;
+  if (infra && (infra.items?.length || infra.scannedUrls > 0)) {
+    html += '<div class="chk-ad-infra">';
+    html += '<span class="chk-ad-infra-label">Инфраструктура</span>';
+    if (infra.items && infra.items.length) {
+      html += '<div class="ad-infra-grid">';
+      infra.items.forEach((it, i) => {
+        const regCls = it.region === 'RU' ? 'ru' : 'int';
+        const regLbl = it.region === 'RU' ? 'РФ / СНГ' : 'Международные';
+        html += `<div class="ad-infra-card" style="animation-delay:${i * 40}ms">
+          <div class="ad-infra-card-top">
+            <span class="ad-infra-region ${regCls}">${regLbl}</span>
+            <span class="ad-infra-name">${escChk(it.name)}</span>
+            <span class="ad-infra-role">${escChk(it.role)}</span>
+          </div>
+          <p class="ad-infra-hint">${escChk(it.hint)}</p>
+          ${it.sampleHost ? `<div class="ad-infra-host" title="${escChk(it.sampleHost)}">↳ ${escChk(it.sampleHost)}</div>` : ''}
+        </div>`;
+      });
+      html += '</div>';
+    } else {
+      const n = infra.scannedUrls || 0;
+      const adSys = data.adSystem ? escChk(String(data.adSystem)) : '';
+      const adSysLine = adSys
+        ? ` &lt;AdSystem&gt;: <strong>${adSys}</strong>.`
+        : '';
+      html += `<p class="ad-infra-empty">Проверено ${n} URL — совпадений с каталогом SSP/DSP нет.${adSysLine}</p>`;
+    }
+    html += '</div>';
+  }
 
   chkSummary.innerHTML = html;
 }
@@ -1240,6 +1271,13 @@ function generateCompliance(data) {
     add('Загрузка / HTTP', lvl, n.msg, 'Проверка ответа сервера до разбора XML (IAB не нормирует transport, но это влияет на все SDK)');
   });
 
+  const adInfra = data.adInfra;
+  if (adInfra && adInfra.items && adInfra.items.length) {
+    const preview = adInfra.items.slice(0, 4).map(i => i.name).join(', ');
+    add('Платформы', 'info', `Распознано: ${preview}${adInfra.items.length > 4 ? '…' : ''}`,
+      'По доменам трекеров, медиа, врапперов и тексту <AdSystem> (популярные РФ/СНГ и международные SSP/DSP). Уточняйте требования у поставщика.');
+  }
+
   const { linearFiles, vpaidFiles, videoFiles, interactives, nonLinears } = getMediaBuckets(data.mediaFiles);
   const allUrls      = Object.values(data.eventMap).flat();
   const hasHttp      = allUrls.some(u => u.startsWith('http://'));
@@ -1353,6 +1391,7 @@ function showChkError(msg, /** @type {Array<{level:string,msg:string}>} */ loadI
 }
 
 function processResults(data) {
+  data.adInfra = analyzeAdInfrastructure(data);
   const load = Array.isArray(data.loadIssues) ? data.loadIssues : [];
   const structural = Array.isArray(data.issues) ? data.issues : [];
   const mergedIssues = [...load, ...structural];

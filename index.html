@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="depth">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -131,6 +131,22 @@
 
       <!-- RESULT BLOCK -->
       <div id="result-section" class="result hidden">
+
+        <div id="ziteg-infra-wrap" class="ziteg-infra-wrap hidden" aria-live="polite">
+          <div class="ziteg-infra-panel" data-collapse-key="ziteg-infra">
+            <div class="table-head-bar">
+              <span class="section-label">ИНФРАСТРУКТУРА</span>
+              <div class="table-actions">
+                <button type="button" class="chk-collapse-btn" aria-expanded="true" title="Свернуть или развернуть" aria-label="Свернуть блок инфраструктуры">
+                  <svg class="chk-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="collapsible-body">
+              <div id="ziteg-infra-body" class="ziteg-infra-body"></div>
+            </div>
+          </div>
+        </div>
 
         <!-- BASE URL ROW -->
         <div class="base-row">
@@ -458,91 +474,233 @@
   <div class="tab-panel" id="panel-vasthelp">
     <main class="vast-help-main">
       <div class="vast-help-inner">
-        <h1 class="vast-help-title">Справка по VAST и интеграциям</h1>
-        <p class="vast-help-lead">Краткая сводка по версиям IAB Video Ad Serving Template, типичным атрибутам и ожиданиям плееров (в т.ч. IMA/SDK). Не заменяет официальную спецификацию IAB.</p>
-
-        <section class="vast-ref-section">
-          <h2>Версии VAST (обзор)</h2>
-          <div class="table-scroll vast-ref-scroll">
-            <table class="vast-ref-table">
-              <thead><tr><th>Версия</th><th>Ключевые особенности</th></tr></thead>
-              <tbody>
-                <tr><td>2.0</td><td>Базовый линейный креатив, Impression, Tracking, ClickThrough, Error; без формального skip offset в Linear.</td></tr>
-                <tr><td>3.0</td><td>Skip (<code>skipoffset</code> на Linear), расширенные события, AdParameters, больше гибкости для mobile.</td></tr>
-                <tr><td>4.0+</td><td>UniversalAdId, AdVerifications (OMID), Mezzanine, Pricing, InteractiveCreativeFile (SIMID), AdServingId, уточнения для CTV/адресуемости.</td></tr>
-              </tbody>
-            </table>
+        <header class="vast-help-header">
+          <h1 class="vast-help-title">Справка по VAST и интеграциям</h1>
+          <p class="vast-help-lead">Расширенное руководство: формат IAB VAST, разбор тега в ZiTeg, типичные события и коды ошибок, ожидания плееров (IMA, CTV) и ориентиры по рекламным платформам. Официальная спецификация IAB остаётся источником истины для продакшена.</p>
+          <div class="vast-help-toolbar">
+            <button type="button" class="btn ghost sm" id="vast-help-expand-all">Развернуть всё</button>
+            <button type="button" class="btn ghost sm" id="vast-help-collapse-all">Свернуть всё</button>
           </div>
-        </section>
+        </header>
 
-        <section class="vast-ref-section">
-          <h2>Атрибут <code>event</code> у <code>&lt;Tracking&gt;</code> (IAB, линейная реклама)</h2>
-          <p class="vast-ref-note">Полный перечень и нюансы — в спецификации IAB. Ниже часто встречающиеся значения для прогресса и взаимодействия.</p>
-          <div class="table-scroll vast-ref-scroll">
-            <table class="vast-ref-table">
-              <thead><tr><th>event</th><th>Назначение</th></tr></thead>
-              <tbody>
-                <tr><td><code>start</code>, <code>firstQuartile</code>, <code>midpoint</code>, <code>thirdQuartile</code>, <code>complete</code></td><td>Квартильная схема воспроизведения.</td></tr>
-                <tr><td><code>mute</code>, <code>unmute</code>, <code>pause</code>, <code>resume</code></td><td>Громкость и пауза.</td></tr>
-                <tr><td><code>fullscreen</code>, <code>exitFullscreen</code></td><td>Полноэкранный режим.</td></tr>
-                <tr><td><code>skip</code></td><td>Пропуск объявления (актуально с VAST 3+ и поддержкой skip в креативе).</td></tr>
-                <tr><td><code>progress</code></td><td>С прогрессом по <code>offset</code> (например <code>00:00:05.000</code> или <code>50%</code>).</td></tr>
-                <tr><td><code>creativeView</code></td><td>Просмотр креатива (non-linear / отдельные сценарии).</td></tr>
-                <tr><td><code>acceptInvitation</code>, <code>close</code>, <code>collapse</code>, <code>expand</code></td><td>Non-linear / expandable.</td></tr>
-              </tbody>
-            </table>
+        <details class="vast-help-block" open>
+          <summary class="vast-help-summary">Что такое VAST и зачем этот раздел</summary>
+          <div class="vast-help-panel">
+            <p><strong>VAST</strong> (Video Ad Serving Template) — XML-формат IAB для описания видеорекламы: медиафайлы, трекеры показа и прогресса, клики, ошибки, обёртки (wrapper) и расширения. Плеер или SDK запрашивает VAST по URL, разбирает XML и воспроизводит креатив.</p>
+            <p><strong>ZiTeg</strong> помогает работать с <em>URL тега</em> (endpoint + query-параметры): разобрать базовый адрес, параметры и макросы. <strong>ZiChecker</strong> анализирует уже полученный XML VAST и цепочку врапперов.</p>
+            <p>Ниже разделы можно сворачивать — удобно при чтении с телефона или при поиске одной темы.</p>
           </div>
-        </section>
+        </details>
 
-        <section class="vast-ref-section">
-          <h2><code>MediaFile</code>: <code>type</code> и <code>delivery</code></h2>
-          <div class="table-scroll vast-ref-scroll">
-            <table class="vast-ref-table">
-              <thead><tr><th>Поле</th><th>Типичные значения</th></tr></thead>
-              <tbody>
-                <tr><td><code>type</code> (MIME)</td><td><code>video/mp4</code>, <code>video/webm</code>, <code>application/javascript</code> (VPAID), <code>application/vnd.apple.mpegurl</code> (HLS).</td></tr>
-                <tr><td><code>delivery</code></td><td><code>progressive</code> — файл по HTTP; <code>streaming</code> — поток (HLS/DASH и т.п., зависит от плеера).</td></tr>
-                <tr><td><code>apiFramework</code></td><td><code>VPAID</code>, <code>MRAID</code> и др. — указывает интерактивный API поверх видео.</td></tr>
-              </tbody>
-            </table>
+        <details class="vast-help-block" open>
+          <summary class="vast-help-summary">VAST тег в ZiTeg: структура URL, параметры и макросы</summary>
+          <div class="vast-help-panel">
+            <p>Типичный тег выглядит как <code>https://хост/путь?ключ=значение&amp;…</code>. После «Парсить» ZiTeg выделяет:</p>
+            <ul class="vast-help-ul">
+              <li><strong>Базовый URL (BASE)</strong> — схема, хост и путь <em>без</em> строки запроса.</li>
+              <li><strong>Инфраструктура</strong> — сопоставление хоста BASE и полных <code>https://…</code> в значениях параметров с внутренним каталогом доменов SSP/DSP.</li>
+              <li><strong>Параметры</strong> — пары <code>ключ=значение</code>. Значения могут быть статическими, макросами в фигурных скобках (<code>{ip}</code>), в квадратных скобках (IAB), в виде <code>%имя_поля%</code> (часто Яндекс/Adfox; в query символ <code>%</code> передают как <code>%25</code>, например <code>%25request.puid9%25</code> → после раскодирования <code>%request.puid9%</code>), либо полными <code>https://…</code> ссылками.</li>
+              <li><strong>Макросы</strong> — подставляются плеером, SDK или сервером объявлений перед запросом. Сверяйте итоговый URL с гайдом вашей сети.</li>
+            </ul>
+            <p class="vast-help-tip">Совет: держите базовый URL на <code>https://</code>, чтобы избежать смешанного контента и блокировок в браузере и in-app WebView.</p>
           </div>
-        </section>
+        </details>
 
-        <section class="vast-ref-section">
-          <h2>Коды <code>&lt;Error&gt;</code> (фрагмент IAB)</h2>
-          <p class="vast-ref-note">URL в Error часто дополняется макросом <code>[ERRORCODE]</code>. Ниже распространённые коды; полный список — в документе IAB VAST.</p>
-          <div class="table-scroll vast-ref-scroll">
-            <table class="vast-ref-table col-code">
-              <thead><tr><th>Код</th><th>Смысл (кратко)</th></tr></thead>
-              <tbody>
-                <tr><td>100–102</td><td>Ошибка разбора XML / валидации VAST.</td></tr>
-                <tr><td>200–203</td><td>Проблемы воспроизведения медиа (не найдено, неподдерживаемый тип и т.д.).</td></tr>
-                <tr><td>300–303</td><td>Timeout / недоступность ресурсов.</td></tr>
-                <tr><td>400–403</td><td>Ошибки враппера / цепочки VAST.</td></tr>
-                <tr><td>600–603</td><td>Ошибки интерактива / VPAID / несовместимости.</td></tr>
-                <tr><td>900–901</td><td>Общая / неизвестная ошибка.</td></tr>
-              </tbody>
-            </table>
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">Макросы и параметры: IAB, Google GAM, OpenRTB / Prebid</summary>
+          <div class="vast-help-panel">
+            <p class="vast-help-p">Ниже сводка по открытым спецификациям и документации вендоров (2024–2026). Реальные имена в вашем теге всегда нужно сверять с интеграционным гайдом DSP/SSP.</p>
+
+            <details class="vast-help-sub">
+              <summary class="vast-help-sub-sum">IAB VAST 4.x — макросы в квадратных скобках</summary>
+              <p class="vast-ref-note">Подставляются видеоплеером или SSAI в URL трекеров. Полный перечень: <a href="https://interactiveadvertisingbureau.github.io/vast/vast4macros/vast4-macros-latest.html" target="_blank" rel="noopener noreferrer">IAB VAST 4.x Macros</a>.</p>
+              <div class="table-scroll vast-ref-scroll">
+                <table class="vast-ref-table col-code">
+                  <thead><tr><th>Макрос</th><th>Назначение (кратко)</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>[CACHEBUSTER]</code></td><td>Случайное число против кэширования.</td></tr>
+                    <tr><td><code>[TIMESTAMP]</code></td><td>Время события.</td></tr>
+                    <tr><td><code>[ERRORCODE]</code></td><td>Код ошибки в <code>Error</code> URL.</td></tr>
+                    <tr><td><code>[CONTENTPLAYHEAD]</code></td><td>Позиция основного контента.</td></tr>
+                    <tr><td><code>[MEDIAPLAYHEAD]</code></td><td>Позиция рекламного ролика.</td></tr>
+                    <tr><td><code>[ASSETURI]</code></td><td>URI медиа креатива.</td></tr>
+                    <tr><td><code>[UNIVERSALADID]</code></td><td>Universal Ad ID.</td></tr>
+                    <tr><td><code>[DEVICEUA]</code> / <code>[IP]</code></td><td>UA и IP (если политика позволяет).</td></tr>
+                    <tr><td><code>[PAGEURL]</code> / <code>[DOMAIN]</code></td><td>Страница и домен.</td></tr>
+                    <tr><td><code>[CONSENT]</code> / <code>[REGULATIONS]</code></td><td>Согласия и регуляторика.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+
+            <details class="vast-help-sub">
+              <summary class="vast-help-sub-sum">Google Ad Manager / IMA — частые query-параметры</summary>
+              <p class="vast-ref-note">Справочник: <a href="https://support.google.com/admanager/answer/10678356" target="_blank" rel="noopener noreferrer">All VAST ad tag parameters</a>. Для веба и приложений часть полей обязательна.</p>
+              <div class="table-scroll vast-ref-scroll">
+                <table class="vast-ref-table">
+                  <thead><tr><th>Параметр</th><th>Назначение</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>iu</code></td><td>Путь рекламного блока <code>/network_code/…/adunit</code>.</td></tr>
+                    <tr><td><code>sz</code></td><td>Размер слота (например <code>640x360</code>).</td></tr>
+                    <tr><td><code>correlator</code></td><td>Случайное целое на показ страницы; в IMA часто выставляет SDK.</td></tr>
+                    <tr><td><code>description_url</code></td><td>URL страницы с описанием видео (для веба — URL-encoded).</td></tr>
+                    <tr><td><code>cust_params</code></td><td>Пользовательский таргетинг <code>key=val</code> (через <code>&amp;</code> внутри значения — кодировать).</td></tr>
+                    <tr><td><code>output</code></td><td>Формат: <code>vast</code>, <code>xml_vast4</code>, <code>vmap</code> и др.</td></tr>
+                    <tr><td><code>env</code></td><td><code>vp</code> (in-stream video) или <code>instream</code> (видео+аудио).</td></tr>
+                    <tr><td><code>gdfp_req</code></td><td>Признак запроса к инвентарю Google (обычно <code>1</code>).</td></tr>
+                    <tr><td><code>gdpr</code>, <code>gdpr_consent</code>, <code>us_privacy</code></td><td>Приватность (EU / US).</td></tr>
+                    <tr><td><code>plcmt</code>, <code>vpa</code>, <code>vpmute</code></td><td>Тип размещения (OpenRTB), VPAID, mute.</td></tr>
+                    <tr><td><code>min_ad_duration</code> / <code>max_ad_duration</code></td><td>Ограничения длительности ролика.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+
+            <details class="vast-help-sub">
+              <summary class="vast-help-sub-sum">OpenRTB, Prebid, SSP — что часто встречается в query</summary>
+              <p>Имена не унифицированы глобально: разные биржи используют <code>site_id</code>, <code>tag_id</code>, <code>placement_id</code>, <code>publisher_id</code>, <code>deal_id</code>, <code>auction_id</code>, <code>imp_id</code>, <code>schain</code> (supply chain), а также <code>consent_string</code> / TCF. Для видео SSP (SpotX, SpringServe и др.) встречаются параметры устройства, контента и приватности в стиле <code>device_ifa</code>, <code>app_bundle</code>, <code>cb</code>, <code>ip_addr</code> — смотрите гайд конкретной площадки.</p>
+            </details>
+
+            <details class="vast-help-sub">
+              <summary class="vast-help-sub-sum">Microsoft Xandr (креативные макросы)</summary>
+              <p>В шаблонах креативов и расширениях VAST встречаются подстановки вида <code>${CACHEBUSTER}</code>, <code>${AUCTION_ID}</code>, <code>${CREATIVE_ID}</code>, <code>${BID_PRICE}</code> — регистр важен. Документация: <a href="https://learn.microsoft.com/en-us/xandr/invest/supported-creative-macros" target="_blank" rel="noopener noreferrer">Supported creative macros</a>.</p>
+            </details>
+
+            <p class="vast-help-tip">В таблице параметров ZiTeg подсказка в колонке «Описание» подтягивается по имени параметра и по значению-макросу в фигурных <code>{…}</code> или квадратных <code>[…]</code> скобках.</p>
           </div>
-        </section>
+        </details>
 
-        <section class="vast-ref-section">
-          <h2>Google IMA SDK и макросы</h2>
-          <p>IMA подставляет макросы в URL трекеров (например время просмотра, причина пропуска). Имена макросов зависят от версии SDK и документации Google; при отладке сравнивайте фактический запрос с шаблоном в VAST.</p>
-        </section>
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">Версии VAST (2.x, 3.x, 4.x)</summary>
+          <div class="vast-help-panel">
+            <div class="table-scroll vast-ref-scroll">
+              <table class="vast-ref-table">
+                <thead><tr><th>Версия</th><th>Ключевые особенности</th></tr></thead>
+                <tbody>
+                  <tr><td>2.0</td><td>Базовый линейный креатив, <code>Impression</code>, <code>Tracking</code>, <code>ClickThrough</code>, <code>Error</code>; без формального <code>skipoffset</code> у <code>Linear</code> в спецификации.</td></tr>
+                  <tr><td>3.0</td><td>Пропуск рекламы (<code>skipoffset</code> на <code>Linear</code>), расширенные события, <code>AdParameters</code>, удобнее для mobile-сценариев.</td></tr>
+                  <tr><td>4.0+</td><td><code>UniversalAdId</code>, <code>AdVerifications</code> (OMID), <code>Mezzanine</code>, <code>Pricing</code>, <code>InteractiveCreativeFile</code> (SIMID), <code>AdServingId</code>, уточнения для CTV и адресуемости.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="vast-ref-note">Многие SSP указывают VAST 3.x или 4.x; фактическая разметка должна соответствовать объявленной версии, иначе строгие SDK могут отклонить ответ.</p>
+          </div>
+        </details>
 
-        <section class="vast-ref-section">
-          <h2>OMID / SIMID</h2>
-          <ul class="vast-ref-list">
-            <li><strong>Open Measurement (OMID)</strong> — верифицируемые показы через <code>AdVerifications</code> / ресурсы OMSDK; типично для VAST 4.x и измеримости.</li>
-            <li><strong>SIMID</strong> — интерактив поверх видео через <code>InteractiveCreativeFile</code> и API SIMID; смена устаревшего VPAID в ряде сценариев.</li>
-          </ul>
-        </section>
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">Атрибут <code>event</code> у <code>&lt;Tracking&gt;</code> (линейная реклама)</summary>
+          <div class="vast-help-panel">
+            <p class="vast-ref-note">Полный перечень — в спецификации IAB. Ниже частые значения для прогресса и взаимодействия.</p>
+            <div class="table-scroll vast-ref-scroll">
+              <table class="vast-ref-table">
+                <thead><tr><th>event</th><th>Назначение</th></tr></thead>
+                <tbody>
+                  <tr><td><code>start</code>, <code>firstQuartile</code>, <code>midpoint</code>, <code>thirdQuartile</code>, <code>complete</code></td><td>Квартильная схема воспроизведения; для отчётности у бирж и DSP обычно нужен полный набор вместе с <code>Impression</code>.</td></tr>
+                  <tr><td><code>mute</code>, <code>unmute</code>, <code>pause</code>, <code>resume</code></td><td>Громкость и пауза.</td></tr>
+                  <tr><td><code>fullscreen</code>, <code>exitFullscreen</code></td><td>Полноэкранный режим.</td></tr>
+                  <tr><td><code>skip</code></td><td>Пропуск объявления (VAST 3+ и поддержка skip у креатива).</td></tr>
+                  <tr><td><code>progress</code></td><td>С привязкой к <code>offset</code> (например <code>00:00:05.000</code> или <code>50%</code>).</td></tr>
+                  <tr><td><code>creativeView</code></td><td>Просмотр креатива (non-linear и др.).</td></tr>
+                  <tr><td><code>acceptInvitation</code>, <code>close</code>, <code>collapse</code>, <code>expand</code></td><td>Non-linear / expandable.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
 
-        <section class="vast-ref-section">
-          <h2>CTV и ограничения плееров</h2>
-          <p>На телевизорах и приставках часто нет полноценного JS/VPAID: отдавайте <code>video/mp4</code> (progressive или поддерживаемый стриминг), избегайте зависимости от VPAID, проверяйте разрешения и битрейт под большой экран.</p>
-        </section>
+        <details class="vast-help-block">
+          <summary class="vast-help-summary"><code>MediaFile</code>: <code>type</code>, <code>delivery</code>, <code>apiFramework</code></summary>
+          <div class="vast-help-panel">
+            <div class="table-scroll vast-ref-scroll">
+              <table class="vast-ref-table">
+                <thead><tr><th>Поле</th><th>Типичные значения</th></tr></thead>
+                <tbody>
+                  <tr><td><code>type</code> (MIME)</td><td><code>video/mp4</code>, <code>video/webm</code>, <code>application/javascript</code> (VPAID), <code>application/vnd.apple.mpegurl</code> (HLS).</td></tr>
+                  <tr><td><code>delivery</code></td><td><code>progressive</code> — файл по HTTP(S); <code>streaming</code> — поток (HLS/DASH; поддержка зависит от плеера).</td></tr>
+                  <tr><td><code>apiFramework</code></td><td><code>VPAID</code>, <code>MRAID</code> и др. — интерактив поверх видео.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>Для CTV и мобильных приложений чаще всего нужен <strong>MP4</strong> без VPAID; WebM на iOS не поддерживается.</p>
+          </div>
+        </details>
+
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">Коды <code>&lt;Error&gt;</code> и макрос <code>[ERRORCODE]</code></summary>
+          <div class="vast-help-panel">
+            <p class="vast-ref-note">URL в <code>Error</code> часто дополняется макросом <code>[ERRORCODE]</code>. Ниже ориентиры по диапазонам; точные коды — в документе IAB VAST.</p>
+            <div class="table-scroll vast-ref-scroll">
+              <table class="vast-ref-table col-code">
+                <thead><tr><th>Код</th><th>Смысл (кратко)</th></tr></thead>
+                <tbody>
+                  <tr><td>100–102</td><td>Ошибка разбора XML / валидации VAST.</td></tr>
+                  <tr><td>200–203</td><td>Проблемы воспроизведения медиа (не найдено, неподдерживаемый тип и т.д.).</td></tr>
+                  <tr><td>300–303</td><td>Timeout / недоступность ресурсов.</td></tr>
+                  <tr><td>400–403</td><td>Ошибки враппера / цепочки VAST.</td></tr>
+                  <tr><td>600–603</td><td>Ошибки интерактива / VPAID / несовместимости.</td></tr>
+                  <tr><td>900–901</td><td>Общая / неизвестная ошибка.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">Популярные платформы: Россия и СНГ</summary>
+          <div class="vast-help-panel">
+            <p>Ниже типичные экосистемы, которые встречаются в тегах и VAST-ответах в регионе. Список не исчерпывающий; совпадение по домену в инструменте ZiTeg/ZiChecker — эвристика для ориентира (виден ли в URL сторонний ad tech), а не вывод о настройке кампании.</p>
+            <ul class="vast-help-ul vast-help-ul-cols">
+              <li><strong>Яндекс Реклама</strong> — поиск, сеть сайтов, приложения; часто домены <code>yandex.ru</code>, <code>yandex.net</code>, CDN <code>yastatic.net</code>.</li>
+              <li><strong>Adfox</strong> — управление инвентарём издателей; интеграция с экосистемой Яндекса.</li>
+              <li><strong>VK Реклама (myTarget)</strong> — соцсети, порталы Mail.ru; домены <code>target.my.com</code>, <code>vk.com</code>.</li>
+              <li><strong>Between Digital</strong> — независимая SSP и точка входа в programmatic для паблишеров и DSP; экосистема <strong>Between Exchange</strong> объединяет продукты вроде видео-DSP <strong>ViHub</strong>, trading desk RTB-Media и аукцион Intency. Видео: in-stream (pre/mid/post), slider, in-page, mobile fullscreen. Интеграции по видео (в т.ч. header bidding / Prebid): <a href="https://cdn.betweendigital.com/prebid_instructions/prebid-video-en.html" target="_blank" rel="noopener noreferrer">Prebid Video — Between</a>. Официальный сайт: <a href="https://betweendigital.ru/" target="_blank" rel="noopener noreferrer">betweendigital.ru</a>. В теге и цепочке VAST часто встречаются хосты <code>between.ru</code>, <code>between.ai</code>, <code>ads.betweendigital.com</code>, <code>betweendigital.com</code> (CDN и ad server).</li>
+              <li><strong>Buzzoola, Hybrid, Soloway, Getintent, Amberdata, OTM</strong> — региональные видео SSP/DSP и performance; в ZiTeg они распознаются по домену из BASE или https-значений параметров — сверяйте макросы и требования с гайдом поставщика.</li>
+              <li><strong>Операторы и финтех</strong> — рекламные продукты на доменах операторов и банков (например МТС, Сбер) — уточняйте требования у поставщика.</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">Популярные платформы: международный рынок</summary>
+          <div class="vast-help-panel">
+            <ul class="vast-help-ul vast-help-ul-cols">
+              <li><strong>Google (GAM / GDFP, IMA)</strong> — <code>doubleclick.net</code>, <code>googlesyndication.com</code> и др.</li>
+              <li><strong>Amazon Advertising / APS</strong> — retail и CTV.</li>
+              <li><strong>Xandr, Magnite, PubMatic, OpenX, Index Exchange</strong> — SSP и биржи.</li>
+              <li><strong>SpotX, SpringServe, FreeWheel</strong> — видео и CTV.</li>
+              <li><strong>Equativ (Smart), Adform, Criteo, The Trade Desk</strong> — ad server и DSP.</li>
+              <li><strong>Taboola, Outbrain, TripleLift, Sharethrough</strong> — native и feed.</li>
+              <li><strong>IAS, DoubleVerify, Moat</strong> — verification (видимость, brand safety) — отдельные пиксели в цепочке.</li>
+              <li><strong>Unity Ads, ironSource, AppLovin, Vungle, Chartboost, Smaato</strong> — mobile и игры.</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">Google IMA SDK и макросы</summary>
+          <div class="vast-help-panel">
+            <p>IMA подставляет макросы в URL трекеров (время просмотра, причина пропуска и т.д.). Набор зависит от версии SDK и политики Google. При отладке сравнивайте фактический HTTP-запрос с шаблоном в VAST и документацией IMA.</p>
+            <p>На HTTPS-страницах все трекеры и медиа должны быть по <code>https://</code>, иначе возможны блокировки mixed content.</p>
+          </div>
+        </details>
+
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">OMID и SIMID</summary>
+          <div class="vast-help-panel">
+            <ul class="vast-ref-list">
+              <li><strong>Open Measurement (OMID)</strong> — измеримость показов через <code>AdVerifications</code> и OMSDK; актуально для VAST 4.x и верификации независимыми поставщиками.</li>
+              <li><strong>SIMID</strong> — интерактив поверх видео через <code>InteractiveCreativeFile</code>; в ряде сценариев приходит на смену VPAID.</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">CTV, мобильные приложения и ограничения плееров</summary>
+          <div class="vast-help-panel">
+            <p>На Smart TV и приставках часто <strong>нет</strong> полноценного JS/VPAID. Ориентируйтесь на <code>video/mp4</code> (progressive или поддерживаемый стриминг), избегайте обязательной зависимости от VPAID, проверяйте разрешение и битрейт под большой экран.</p>
+            <p>В приложениях учитывайте ATS (iOS), политики сети (Android), обязательность рекламного идентификатора (GAID/IDFA) и корректность store URL.</p>
+          </div>
+        </details>
       </div>
     </main>
   </div>
@@ -570,6 +728,7 @@
   <div class="toast hidden" id="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/xml/xml.js" crossorigin="anonymous"></script>
+  <script src="ad-infra.js"></script>
   <script src="app.js"></script>
   <script src="checker.js"></script>
 </body>

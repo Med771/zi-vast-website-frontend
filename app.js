@@ -1,66 +1,246 @@
 'use strict';
 
-// ─── Macro catalogue ─────────────────────────────────────────────────────────
+// ─── Macro catalogue (фигурные скобки — типично для DSP/SDK в query и шаблонах) ─
 const MACRO_NOTES = {
-  '{app}':         'Bundle ID приложения',
-  '{gaid}':        'Google Advertising ID',
-  '{idfa}':        'Apple IDFA',
-  '{deviceid}':    'ID устройства',
-  '{ip}':          'IP-адрес пользователя',
-  '{ua}':          'User-Agent',
-  '{tz}':          'Часовой пояс',
-  '{rnd}':         'Кэш-бастер',
-  '{cb}':          'Кэш-бастер',
-  '{cachebuster}': 'Кэш-бастер',
-  '{width}':       'Ширина плеера',
-  '{height}':      'Высота плеера',
-  '{lat}':         'Широта',
-  '{lon}':         'Долгота',
-  '{country}':     'Код страны',
-  '{lang}':        'Язык',
-  '{appname}':     'Название приложения',
-  '{pageurl}':     'URL страницы',
-  '{content_id}':  'ID контента',
-  '{duration}':    'Длительность контента',
+  '{app}':            'Bundle ID приложения',
+  '{app_bundle}':     'Bundle ID приложения',
+  '{gaid}':           'Google Advertising ID (GAID)',
+  '{idfa}':           'Apple IDFA',
+  '{aaid}':           'Android Advertising ID',
+  '{deviceid}':       'ID устройства',
+  '{device_id}':      'ID устройства',
+  '{ip}':             'IP-адрес пользователя',
+  '{ua}':             'User-Agent клиента',
+  '{tz}':             'Часовой пояс',
+  '{rnd}':            'Случайное число / кэш-бастер',
+  '{cb}':             'Кэш-бастер',
+  '{cachebuster}':    'Кэш-бастер',
+  '{random}':         'Случайное значение (анти-кэш)',
+  '{timestamp}':      'Unix-время или метка запроса',
+  '{width}':          'Ширина плеера (px)',
+  '{height}':         'Высота плеера (px)',
+  '{player_width}':   'Ширина видеоплеера',
+  '{player_height}':  'Высота видеоплеера',
+  '{lat}':            'Широта',
+  '{lon}':            'Долгота',
+  '{latitude}':       'Широта',
+  '{longitude}':      'Долгота',
+  '{country}':        'Код страны (ISO)',
+  '{lang}':           'Язык (ISO)',
+  '{language}':       'Язык интерфейса/контента',
+  '{appname}':        'Название приложения',
+  '{app_name}':       'Название приложения',
+  '{pageurl}':        'URL страницы с видео',
+  '{page_url}':       'URL страницы',
+  '{referrer}':       'Referrer',
+  '{content_id}':     'ID контента / видео',
+  '{duration}':       'Длительность контента (с)',
+  '{video_duration}': 'Длительность ролика',
+  '{correlator}':     'GAM: общий коррелятор сессии страницы',
+  '{description_url}': 'GAM: URL страницы с описанием видео',
+  '{iu}':             'GAM: путь рекламного блока /network/.../adunit',
+  '{cust_params}':    'GAM: пользовательские пары key=value для таргетинга',
+  '{gdpr}':           'Флаг GDPR (0/1)',
+  '{gdpr_consent}':   'Строка TCF consent',
+  '{us_privacy}':     'US Privacy (CCPA строка)',
+  '{npa}':            'Режим без персонализации рекламы',
+  '{ppid}':           'Publisher Provided Identifier',
+  '{plcmt}':          'Тип размещения (OpenRTB plcmt)',
+  '{omid}':           'Поддержка OMID / OMSDK',
+  '{auction_id}':     'ID аукциона (programmatic)',
+  '{creative_id}':      'ID креатива',
+  '{placement_id}':     'ID размещения',
+  '{publisher_id}':   'ID паблишера',
+  '{site_id}':        'ID сайта / инвентаря',
+  '{deal_id}':        'ID сделки PMP',
+  '{seat_id}':        'ID места DSP/сид',
+  '{session_id}':     'ID сессии',
+  '{request_id}':     'ID запроса объявления',
+  '{user_id}':        'ID пользователя (hash/anon)',
+  '{segment}':        'Сегмент аудитории',
+  '{keywords}':       'Ключевые слова контента',
+  '{channel}':        'Канал / линейка',
+  '{floor}':          'Минимальная ставка',
+  '{currency}':       'Валюта (ISO)',
+  '{bundle}':         'Bundle ID (синоним app)',
+  '{storeurl}':       'URL страницы приложения в сторе',
+  '{ifa}':            'Рекламный идентификатор устройства',
+  '{dnt}':            'Do Not Track',
+  '{limited_ad_tracking}': 'Ограничение трекинга (LAT)',
+  '{partner}':        'ID партнёра / сети',
+  '{tag_id}':         'ID тега / placement в SSP',
 };
 
-// ─── Per-key hints ────────────────────────────────────────────────────────────
+/** IAB VAST 4.x — макросы в квадратных скобках в URL трекеров (подставляет плеер/SSAI). */
+const BRACKET_MACRO_NOTES = {
+  '[CACHEBUSTER]':        'Случайное число — обход кэша прокси/CDN',
+  '[TIMESTAMP]':          'Время события (Unix или ISO — по спецификации плеера)',
+  '[ERRORCODE]':          'Код ошибки VAST при вызове Error URL',
+  '[CONTENTPLAYHEAD]':    'Позиция воспроизведения основного контента (time offset)',
+  '[ASSETURI]':           'URI медиа-ассета рекламы',
+  '[MEDIAPLAYHEAD]':      'Позиция воспроизведения рекламного ролика',
+  '[UNIVERSALADID]':      'Universal Ad ID креатива',
+  '[ADCATEGORIES]':       'Категории рекламы (IAB)',
+  '[BLOCKEDADCATEGORIES]': 'Заблокированные категории',
+  '[DEVICEUA]':           'User-Agent устройства',
+  '[IP]':                 'IP-адрес (если разрешено политикой)',
+  '[LATLONG]':            'Широта и долгота',
+  '[DOMAIN]':             'Домен приложения или сайта',
+  '[PAGEURL]':            'URL страницы (закодированный)',
+  '[PLAYER_SIZE]':        'Ширина×высота плеера',
+  '[PLAYER_SIZE_OFFSET]': 'Размер с учётом offset UI',
+  '[REGULATIONS]':        'Регуляторные сигналы (строка)',
+  '[ADTYPE]':             'Тип объявления (linear/nonlinear и т.д.)',
+  '[TRANSACTIONID]':      'ID транзакции показа',
+  '[PLACEMENTTYPE]':      'Тип размещения (in-stream, и т.п.)',
+  '[BREAKPOSITION]':      'Позиция рекламного блока в контенте',
+  '[CONSENT]':            'Строка согласия (GDPR/CCPA и др.)',
+  '[LIMITADTRACKING]':    'Ограничение рекламного трекинга',
+  '[PLAYERCAPABILITIES]': 'Возможности плеера (коды)',
+  '[ADCOUNT]':            'Число объявлений в pod',
+  '[REASON]':             'Причина события (например skip)',
+  '[MINIMUMDURATION]':    'Мин. длительность слота',
+  '[MAXIMUMDURATION]':    'Макс. длительность слота',
+  '[EXTENDEDADPLAYHEAD]': 'Расширенная метка прогресса',
+  '[IFA]':                'Identifier for Advertising',
+  '[IFA_TYPE]':           'Тип IFA (idfa, gaid, …)',
+  '[CLIENTUA]':           'User-Agent клиента',
+  '[SERVERUA]':           'User-Agent сервера SSAI',
+  '[APPID]':              'ID приложения',
+  '[BUNDLEID]':           'Bundle ID',
+  '[STOREURL]':           'URL в магазине приложений',
+  '[STOREID]':            'ID магазина',
+  '[DEVICEID]':           'ID устройства',
+};
+
+// ─── Per-key hints (имена query-параметров: GAM, OpenRTB-стиль, SSP) ───────────
 const KEY_HINTS = {
-  ip:            'IP пользователя',
-  ua:            'User-Agent',
-  bundle:        'Bundle приложения',
-  app_bundle:    'Bundle приложения',
-  appid:         'ID приложения',
-  ifa:           'Рекл. ID (GAID/IDFA)',
-  gaid:          'Google Ad ID',
-  google_aid:    'Google Ad ID',
-  idfa:          'Apple IDFA',
-  w:             'Ширина (px)',
-  h:             'Высота (px)',
-  width:         'Ширина (px)',
-  height:        'Высота (px)',
-  cachebuster:   'Кэш-бастер',
-  cb:            'Кэш-бастер',
-  rnd:           'Кэш-бастер',
-  maxd:          'Макс. длительность (с)',
-  mind:          'Мин. длительность (с)',
-  device_type:   'Тип устройства',
-  device_os:     'ОС устройства',
-  content_type:  'Тип контента',
-  ad_place_type: 'Тип размещения',
-  position:      'Позиция рекламы',
-  is_child:      'COPPA флаг 0/1',
-  time_shift:    'Часовой пояс',
-  account_id:    'ID аккаунта/устройства',
-  app_storeurl:  'Ссылка на магазин',
-  puid60:        'Параметр приложения',
-  puid31:        'Параметр приложения',
-  puid20:        'Параметр приложения',
-  p1:            'Параметр паблишера',
-  p2:            'Параметр паблишера',
-  eid2:          'ID пользователя',
-  eid3:          'ID пользователя',
-  eid4:          'ID пользователя',
+  ip:              'IP пользователя',
+  ua:              'User-Agent',
+  bundle:          'Bundle приложения',
+  app_bundle:      'Bundle приложения',
+  appid:           'ID приложения',
+  app_id:          'ID приложения',
+  ifa:             'Рекл. ID (GAID/IDFA)',
+  gaid:            'Google Advertising ID',
+  google_aid:      'Google Ad ID',
+  idfa:            'Apple IDFA',
+  aaid:            'Android Ad ID',
+  did:             'Device ID (общий)',
+  didmd5:          'Device ID MD5',
+  didsha1:         'Device ID SHA1',
+  w:               'Ширина (px)',
+  h:               'Высота (px)',
+  width:           'Ширина (px)',
+  height:          'Высота (px)',
+  cachebuster:     'Кэш-бастер',
+  cb:              'Кэш-бастер',
+  rnd:             'Случайное число',
+  t:               'Время / timestamp',
+  maxd:            'Макс. длительность (с)',
+  mind:            'Мин. длительность (с)',
+  max_ad_duration: 'GAM: макс. длительность ролика',
+  min_ad_duration: 'GAM: мин. длительность ролика',
+  device_type:     'Тип устройства (phone, tv, …)',
+  devicetype:      'Тип устройства',
+  device_os:       'ОС устройства',
+  os:              'Операционная система',
+  content_type:    'Тип контента',
+  ad_place_type:   'Тип размещения',
+  position:        'Позиция рекламы',
+  is_child:        'COPPA / детская аудитория (0/1)',
+  tfcd:            'GAM: Tag for Child-Directed Treatment',
+  time_shift:      'Часовой пояс',
+  account_id:      'ID аккаунта/устройства',
+  app_storeurl:    'Ссылка на магазин',
+  storeurl:        'URL приложения в сторе',
+  puid60:          'Параметр приложения (сеть)',
+  puid31:          'Параметр приложения',
+  puid20:          'Параметр приложения',
+  puid9:           'Слот puid (профиль/приложение); значение может быть %request.puid9% или %25request.puid9%25 в query',
+  p1:              'Параметр паблишера',
+  p2:              'Параметр паблишера',
+  eid2:            'ID пользователя (ext)',
+  eid3:            'ID пользователя',
+  eid4:            'ID пользователя',
+  // —— Google Ad Manager / IMA (частые query-параметры) ——
+  iu:              'GAM: путь рекламного блока /network/.../adunit',
+  sz:              'GAM: размер слота (640x360 и т.д.)',
+  correlator:      'GAM/IMA: коррелятор сессии (случайное целое)',
+  description_url: 'GAM: URL страницы с видео (часто обязателен)',
+  cust_params:     'GAM: key=val&… пользовательский таргетинг (URL-encoded)',
+  output:          'GAM: формат ответа (vast, xml_vast4, vmap, …)',
+  env:             'GAM: среда (vp=in-stream video, instream)',
+  gdfp_req:        'GAM: признак запроса к схеме Google (обычно 1)',
+  gdpr:            'GDPR флаг (0/1)',
+  gdpr_consent:    'TCF consent string',
+  addtl_consent:   'Доп. согласие (Google Additional Consent)',
+  us_privacy:      'CCPA US Privacy string',
+  npa:             'Non-personalized ads (0/1)',
+  ppid:            'Publisher Provided ID (хэш/ID от издателя)',
+  plcmt:           'OpenRTB: тип инвентаря (1=in-stream, …)',
+  vpa:             'GAM: разрешён VPAID (0/1)',
+  vpmute:          'GAM: старт с mute (0/1)',
+  wta:             'GAM: willingness to autoplay',
+  ad_rule:         'GAM: правила подачи нескольких роликов (pod)',
+  pod:             'GAM: номер pod / рекламного блока',
+  ppos:            'GAM: позиция в pod (pre/mid/post)',
+  ppt:             'GAM: тип подачи pod',
+  hl:              'Язык интерфейса объявлений (ISO)',
+  msid:            'GAM mobile: матчинг app к inventory',
+  rdid:            'Resettable device ID (CTV/Android)',
+  idtype:          'Тип ID (adid, idfa, …)',
+  omid_p:          'OM Partner / OMID версия',
+  sdk_apis:        'Битовая маска поддерживаемых API (MRAID, OMID, …)',
+  url:             'Реферер или канонический URL (зависит от сети)',
+  an:              'Имя приложения (закодированное)',
+  vid:             'ID видео / контента',
+  sid:             'Session / site id (сеть)',
+  vad_type:        'Тип видеорекламы',
+  vpi:             'Video protocol / индекс',
+  vpos:            'Позиция относительно контента',
+  ott_placement:   'CTV: тип размещения',
+  paln:            'Programmatic guaranteed / deal hint',
+  schain:          'Supply chain (OpenRTB sellers.json)',
+  // —— OpenRTB / Prebid / programmatic ——
+  auction_id:      'ID аукциона',
+  auction_package: 'Пакет аукциона',
+  seat:            'DSP seat',
+  deal_id:         'Deal ID (PMP)',
+  imp_id:          'Impression ID',
+  site_id:         'ID сайта в SSP',
+  publisher_id:    'ID паблишера',
+  tag_id:          'ID тега / placement',
+  request_id:      'ID запроса',
+  transaction_id:  'ID транзакции',
+  consent_string:  'Строка согласия (TCF)',
+  usp_consent:     'US Privacy consent',
+  ccpa:            'Флаг/строка CCPA',
+  lat:             'Широта',
+  lon:             'Долгота',
+  zip:             'Почтовый индекс',
+  city:            'Город',
+  region:          'Регион / штат',
+  country:         'Страна',
+  yob:             'Год рождения',
+  gender:          'Пол (M/F/O)',
+  keywords:        'Ключевые слова',
+  cat:             'Категория IAB контента',
+  page:            'URL или путь страницы',
+  ref:             'Referrer',
+  dnt:             'Do Not Track',
+  lmt:             'Limited ad tracking',
+  // —— Яндекс / Adfox-стиль (распространённые имена) ——
+  puid:            'Профильный/приложение ID (сети РФ)',
+  erid:            'Токен учёта рекламы (РФ маркировка)',
+  // —— SpotX / видео SSP (типичные имена в документации) ——
+  channel_id:      'ID канала контента',
+  app_name:        'Название приложения',
+  device_make:     'Производитель устройства',
+  device_model:    'Модель устройства',
+  device_ifa:      'IFA устройства',
+  content_language: 'Язык контента (ISO-639-1)',
+  is_livestream:   'Признак live (0/1)',
 };
 
 // ─── Validation rules ─────────────────────────────────────────────────────────
@@ -204,11 +384,46 @@ function safeDecodeURI(s) {
   try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch { return s; }
 }
 
+/** Несколько уровней decodeURIComponent — для значений вроде %25request.puid9%25 → %request.puid9%. */
+function decodeParamValueForHint(v) {
+  let s = String(v);
+  for (let i = 0; i < 6; i++) {
+    try {
+      const next = decodeURIComponent(s.replace(/\+/g, ' '));
+      if (next === s) break;
+      s = next;
+    } catch {
+      break;
+    }
+  }
+  return s;
+}
+
+/** Подсказка для макросов в обёртке %…% (Яндекс/Adfox и др.). */
+function percentMacroHint(inner) {
+  const low = inner.toLowerCase();
+  if (low.startsWith('request.')) {
+    const field = low.slice('request.'.length);
+    const puid = /^puid\d+$/.test(field)
+      ? `слот профиля приложения (${field})`
+      : 'поле объекта request на стороне сервера';
+    return `Макрос %…%: при запросе подставится ${inner} — ${puid}. В query часто экранируют как %25…%25.`;
+  }
+  if (/^puid\d+$/.test(low)) {
+    return `Идентификатор приложения/профиля (puid). В строке запроса % часто кодируют как %25.`;
+  }
+  return `Макрос подстановки %…%: сервер заменит до выхода в сеть. Экранирование: %25 = символ %.`;
+}
+
 // ─── Value type ───────────────────────────────────────────────────────────────
 function valType(v) {
   if (v === '' || v == null) return 'empty';
-  if (/\{[^}]+\}/.test(v)) return 'macro';
-  if (/^https?:\/\//i.test(v)) return 'url';
+  const t = String(v).trim();
+  if (/\{[^}]+\}/.test(t)) return 'macro';
+  if (/^\[[^\]]+\]$/.test(t)) return 'macro';
+  const decoded = decodeParamValueForHint(t);
+  if (/^%[^%]+%$/.test(decoded.trim())) return 'macro';
+  if (/^https?:\/\//i.test(t)) return 'url';
   return 'static';
 }
 
@@ -228,9 +443,24 @@ function typeBadge(v) {
 function rowNote(key, val) {
   const kl = key.toLowerCase().trim();
   if (KEY_HINTS[kl]) return KEY_HINTS[kl];
-  const m = val.match(/^\{([^}]+)\}$/);
-  if (m) return MACRO_NOTES[`{${m[1]}}`] || '';
-  return '';
+  const tryNote = (s) => {
+    const m = s.match(/^\{([^}]+)\}$/);
+    if (m) {
+      const inner = m[1].trim();
+      return MACRO_NOTES[`{${inner}}`] || MACRO_NOTES[`{${inner.toLowerCase()}}`] || '';
+    }
+    const b = s.match(/^\[([^\]]+)\]$/);
+    if (b) {
+      const canon = b[1].trim().toUpperCase().replace(/\s+/g, '_');
+      return BRACKET_MACRO_NOTES[`[${canon}]`] || '';
+    }
+    const pct = s.trim().match(/^%([^%]+)%$/);
+    if (pct) return percentMacroHint(pct[1]);
+    return '';
+  };
+  let note = tryNote(val);
+  if (!note) note = tryNote(decodeParamValueForHint(val));
+  return note;
 }
 
 // ─── Row class ────────────────────────────────────────────────────────────────
@@ -390,12 +620,24 @@ function renderOutput() {
 }
 
 function fmtVal(v) {
+  if (v === '' || v == null) return `<span class="o-empty">(пусто)</span>`;
+  const raw = String(v);
+  const tr = raw.trim();
+  if (/^https?:\/\//i.test(tr)) return `<span class="o-url">${esc(raw)}</span>`;
+  const decoded = decodeParamValueForHint(raw);
+  const dTrim = decoded.trim();
+  if (/^%[^%]+%$/.test(dTrim)) {
+    if (tr !== dTrim) {
+      return `<span class="o-static">${esc(raw)}</span><span class="o-eq"> → </span><span class="o-macro">${esc(decoded)}</span>`;
+    }
+    return `<span class="o-macro">${esc(decoded)}</span>`;
+  }
   const t = valType(v);
-  if (t === 'empty')  return `<span class="o-empty">(пусто)</span>`;
-  if (t === 'static') return `<span class="o-static">${esc(v)}</span>`;
-  if (t === 'url')    return `<span class="o-url">${esc(v)}</span>`;
-  // macro — highlight each placeholder
-  return esc(v).replace(/\{[^}]+\}/g, m => `<span class="o-macro">${m}</span>`);
+  if (t === 'static') return `<span class="o-static">${esc(raw)}</span>`;
+  let out = esc(raw);
+  out = out.replace(/\{[^}]+\}/g, m => `<span class="o-macro">${m}</span>`);
+  out = out.replace(/\[[^\]]+\]/g, m => `<span class="o-macro">${m}</span>`);
+  return out;
 }
 
 // ─── Animation helpers ────────────────────────────────────────────────────────
@@ -449,12 +691,63 @@ function addScanLine(tr) {
   setTimeout(() => scan.remove(), 700);
 }
 
+// ─── Инфраструктура (домены из BASE и https-параметров) ───────────────────────
+function renderZitegInfra() {
+  const wrap = document.getElementById('ziteg-infra-wrap');
+  const body = document.getElementById('ziteg-infra-body');
+  if (!wrap || !body) return;
+  const fn = typeof window !== 'undefined' && window.analyzeAdInfrastructureFromVastTag;
+  if (typeof fn !== 'function') {
+    wrap.classList.add('hidden');
+    return;
+  }
+  const base = baseInput.value.trim();
+  const infra = fn(base, params);
+  const show = (infra.items && infra.items.length > 0) || (infra.scannedUrls > 0);
+  if (!show) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+  let html = '';
+  if (infra.items && infra.items.length) {
+    html += '<div class="ad-infra-grid">';
+    infra.items.forEach((it, i) => {
+      const regCls = it.region === 'RU' ? 'ru' : 'int';
+      const regLbl = it.region === 'RU' ? 'РФ / СНГ' : 'Международные';
+      html += `<div class="ad-infra-card" style="animation-delay:${i * 40}ms">
+        <div class="ad-infra-card-top">
+          <span class="ad-infra-region ${regCls}">${regLbl}</span>
+          <span class="ad-infra-name">${esc(it.name)}</span>
+          <span class="ad-infra-role">${esc(it.role)}</span>
+        </div>
+        <p class="ad-infra-hint">${esc(it.hint)}</p>
+        ${it.sampleHost ? `<div class="ad-infra-host" title="${esc(it.sampleHost)}">↳ ${esc(it.sampleHost)}</div>` : ''}
+      </div>`;
+    });
+    html += '</div>';
+  } else {
+    const hostFn = typeof window !== 'undefined' && window.hostnameFromVastUrl;
+    const baseHost = hostFn ? hostFn(base) : '';
+    const hostEsc = baseHost ? esc(baseHost) : '—';
+    const extraUrls = infra.scannedUrls > 1 ? infra.scannedUrls - 1 : 0;
+    const extra = extraUrls > 0
+      ? ` Дополнительно проверено ${extraUrls} URL из значений параметров — совпадений с каталогом нет.`
+      : '';
+    html += `<p class="ad-infra-empty">Хост <strong>${hostEsc}</strong> не найден в каталоге доменов SSP/DSP.${extra}</p>`;
+  }
+  body.innerHTML = html;
+}
+
 // ─── Main refresh cycle ───────────────────────────────────────────────────────
 function refresh() {
   const issues = validate(baseInput.value, params);
   renderValidation(issues);
   renderTopbar(issues);
   renderOutput();
+  if (!resultSec.classList.contains('hidden')) {
+    renderZitegInfra();
+  }
 }
 
 // ─── Parse action ─────────────────────────────────────────────────────────────
@@ -519,6 +812,8 @@ btnClear.addEventListener('click', () => {
   outBar.classList.add('hidden');
   valBanner.className = 'val-bar hidden';
   zitegStats.classList.add('hidden');
+  const zi = document.getElementById('ziteg-infra-wrap');
+  if (zi) zi.classList.add('hidden');
 });
 
 vastInput.addEventListener('keydown', e => {
@@ -626,7 +921,7 @@ const THEME_PRESETS = ['ember', 'depth', 'obsidian', 'frost', 'silver'];
 
 function applyTheme(preset) {
   const html = document.documentElement;
-  const id = THEME_PRESETS.includes(preset) ? preset : 'ember';
+  const id = THEME_PRESETS.includes(preset) ? preset : 'depth';
   if (id === 'ember') html.removeAttribute('data-theme');
   else html.setAttribute('data-theme', id);
   try { localStorage.setItem(THEME_KEY, id); } catch {}
@@ -637,9 +932,9 @@ function applyTheme(preset) {
 }
 
 (function initTheme() {
-  let saved = 'ember';
-  try { saved = localStorage.getItem(THEME_KEY) || 'ember'; } catch {}
-  applyTheme(THEME_PRESETS.includes(saved) ? saved : 'ember');
+  let saved = 'depth';
+  try { saved = localStorage.getItem(THEME_KEY) || 'depth'; } catch {}
+  applyTheme(THEME_PRESETS.includes(saved) ? saved : 'depth');
 
   const strip = document.getElementById('theme-strip');
   if (!strip) return;
@@ -701,3 +996,16 @@ function initCollapsiblePanels(/** @type {ParentNode} */ root) {
 
 renderHistPanel();
 initCollapsiblePanels(document.body);
+
+(function initVastHelpToolbar() {
+  const root = document.getElementById('panel-vasthelp');
+  if (!root) return;
+  const expand = document.getElementById('vast-help-expand-all');
+  const collapse = document.getElementById('vast-help-collapse-all');
+  expand?.addEventListener('click', () => {
+    root.querySelectorAll('details.vast-help-block').forEach((d) => { d.open = true; });
+  });
+  collapse?.addEventListener('click', () => {
+    root.querySelectorAll('details.vast-help-block').forEach((d) => { d.open = false; });
+  });
+})();
