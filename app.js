@@ -996,16 +996,3 @@ function initCollapsiblePanels(/** @type {ParentNode} */ root) {
 
 renderHistPanel();
 initCollapsiblePanels(document.body);
-
-(function initVastHelpToolbar() {
-  const root = document.getElementById('panel-vasthelp');
-  if (!root) return;
-  const expand = document.getElementById('vast-help-expand-all');
-  const collapse = document.getElementById('vast-help-collapse-all');
-  expand?.addEventListener('click', () => {
-    root.querySelectorAll('details.vast-help-block').forEach((d) => { d.open = true; });
-  });
-  collapse?.addEventListener('click', () => {
-    root.querySelectorAll('details.vast-help-block').forEach((d) => { d.open = false; });
-  });
-})();
