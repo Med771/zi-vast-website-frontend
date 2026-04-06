@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZiTeg — Парсер VAST тегов</title>
+  <title>ZiTag — Парсер VAST тегов</title>
+  <link id="product-canonical" rel="canonical" href="https://zi-tech.ru/digital/zitag" />
   <link rel="icon" href="logo.png" type="image/png" />
   <link rel="apple-touch-icon" href="logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -21,7 +22,7 @@
   <header class="topbar">
     <div class="topbar-left">
       <div class="logo-wrap">
-        <img src="logo.png" alt="ZiTeg" width="48" height="48" class="logo" />
+        <img src="logo.png" alt="ZiTag" width="48" height="48" class="logo" />
       </div>
       <div class="brand">
         <span class="brand-name">ZiTech</span>
@@ -30,10 +31,11 @@
     </div>
 
     <div class="topbar-center">
+      <div class="topbar-center-stack">
       <div class="tab-nav-inner">
-        <button class="tab-btn active" data-tab="ziteg">
+        <button class="tab-btn active" data-tab="zitag">
           <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-          ZiTeg
+          ZiTag
           <span class="tab-chip">Парсер</span>
         </button>
         <button class="tab-btn" data-tab="zichecker">
@@ -42,6 +44,12 @@
           <span class="tab-chip">Валидатор</span>
         </button>
         <div class="tab-indicator" id="tab-indicator"></div>
+      </div>
+      <div class="topbar-product-urls" aria-label="Страницы на zi-tech.ru">
+        <a href="https://zi-tech.ru/digital/zitag" target="_blank" rel="noopener noreferrer" class="topbar-product-url" title="ZiTag на zi-tech.ru">zi-tech.ru/digital/zitag</a>
+        <span class="topbar-product-urls-sep" aria-hidden="true">·</span>
+        <a href="https://zi-tech.ru/digital/zichecker" target="_blank" rel="noopener noreferrer" class="topbar-product-url" title="ZiChecker на zi-tech.ru">zi-tech.ru/digital/zichecker</a>
+      </div>
       </div>
     </div>
 
@@ -57,12 +65,12 @@
     </div>
   </header>
 
-  <!-- ══ TAB: ZiTeg ════════════════════════════════════════ -->
-  <div class="tab-panel active" id="panel-ziteg">
+  <!-- ══ TAB: ZiTag ════════════════════════════════════════ -->
+  <div class="tab-panel active" id="panel-zitag">
 
     <!-- Stats bar -->
-    <div class="ziteg-stats hidden" id="ziteg-stats">
-      <div class="ziteg-stats-inner">
+    <div class="zitag-stats hidden" id="zitag-stats">
+      <div class="zitag-stats-inner">
         <div class="ts" id="ts-params">
           <span class="ts-v" id="ts-params-val">0</span>
           <span class="ts-l">параметры</span>
@@ -127,8 +135,8 @@
       <!-- RESULT BLOCK -->
       <div id="result-section" class="result hidden">
 
-        <div id="ziteg-infra-wrap" class="ziteg-infra-wrap hidden" aria-live="polite">
-          <div class="ziteg-infra-panel" data-collapse-key="ziteg-infra">
+        <div id="zitag-infra-wrap" class="zitag-infra-wrap hidden" aria-live="polite">
+          <div class="zitag-infra-panel" data-collapse-key="zitag-infra">
             <div class="table-head-bar">
               <span class="section-label">ИНФРАСТРУКТУРА</span>
               <div class="table-actions">
@@ -138,7 +146,7 @@
               </div>
             </div>
             <div class="collapsible-body">
-              <div id="ziteg-infra-body" class="ziteg-infra-body"></div>
+              <div id="zitag-infra-body" class="zitag-infra-body"></div>
             </div>
           </div>
         </div>
@@ -186,14 +194,14 @@
 
         </div><!-- /result -->
 
-      <section class="ziteg-doc vast-help-embed" aria-labelledby="ziteg-doc-title">
-        <h2 id="ziteg-doc-title" class="vast-help-embed-title">Справка парсера</h2>
+      <section class="zitag-doc vast-help-embed" aria-labelledby="zitag-doc-title">
+        <h2 id="zitag-doc-title" class="vast-help-embed-title">Справка парсера</h2>
         <p class="vast-help-embed-lead">URL тега, макросы в query и ориентиры по рекламным платформам. Официальная спецификация IAB — источник истины для продакшена.</p>
 
         <details class="vast-help-block" open>
           <summary class="vast-help-summary">Структура URL, параметры и макросы</summary>
           <div class="vast-help-panel">
-            <p>Типичный тег выглядит как <code>https://хост/путь?ключ=значение&amp;…</code>. После «Парсить» ZiTeg выделяет:</p>
+            <p>Типичный тег выглядит как <code>https://хост/путь?ключ=значение&amp;…</code>. После «Парсить» ZiTag выделяет:</p>
             <ul class="vast-help-ul">
               <li><strong>Базовый URL (BASE)</strong> — схема, хост и путь <em>без</em> строки запроса.</li>
               <li><strong>Инфраструктура</strong> — сопоставление хоста BASE и полных <code>https://…</code> в значениях параметров с внутренним каталогом доменов SSP/DSP.</li>
@@ -264,20 +272,20 @@
               <p>В шаблонах креативов и расширениях VAST встречаются подстановки вида <code>${CACHEBUSTER}</code>, <code>${AUCTION_ID}</code>, <code>${CREATIVE_ID}</code>, <code>${BID_PRICE}</code> — регистр важен. Документация: <a href="https://learn.microsoft.com/en-us/xandr/invest/supported-creative-macros" target="_blank" rel="noopener noreferrer">Supported creative macros</a>.</p>
             </details>
 
-            <p class="vast-help-tip">В таблице параметров ZiTeg подсказка в колонке «Описание» подтягивается по имени параметра и по значению-макросу в фигурных <code>{…}</code> или квадратных <code>[…]</code> скобках.</p>
+            <p class="vast-help-tip">В таблице параметров ZiTag подсказка в колонке «Описание» подтягивается по имени параметра и по значению-макросу в фигурных <code>{…}</code> или квадратных <code>[…]</code> скобках.</p>
           </div>
         </details>
 
         <details class="vast-help-block">
           <summary class="vast-help-summary">Популярные платформы: Россия и СНГ</summary>
           <div class="vast-help-panel">
-            <p>Ниже типичные экосистемы, которые встречаются в тегах и VAST-ответах в регионе. Список не исчерпывающий; совпадение по домену в инструменте ZiTeg/ZiChecker — эвристика для ориентира (виден ли в URL сторонний ad tech), а не вывод о настройке кампании.</p>
+            <p>Ниже типичные экосистемы, которые встречаются в тегах и VAST-ответах в регионе. Список не исчерпывающий; совпадение по домену в инструменте ZiTag/ZiChecker — эвристика для ориентира (виден ли в URL сторонний ad tech), а не вывод о настройке кампании.</p>
             <ul class="vast-help-ul vast-help-ul-cols">
               <li><strong>Яндекс Реклама</strong> — поиск, сеть сайтов, приложения; часто домены <code>yandex.ru</code>, <code>yandex.net</code>, CDN <code>yastatic.net</code>.</li>
               <li><strong>Adfox</strong> — управление инвентарём издателей; интеграция с экосистемой Яндекса.</li>
               <li><strong>VK Реклама (myTarget)</strong> — соцсети, порталы Mail.ru; домены <code>target.my.com</code>, <code>vk.com</code>.</li>
               <li><strong>Between Digital</strong> — независимая SSP и точка входа в programmatic для паблишеров и DSP; экосистема <strong>Between Exchange</strong> объединяет продукты вроде видео-DSP <strong>ViHub</strong>, trading desk RTB-Media и аукцион Intency. Видео: in-stream (pre/mid/post), slider, in-page, mobile fullscreen. Интеграции по видео (в т.ч. header bidding / Prebid): <a href="https://cdn.betweendigital.com/prebid_instructions/prebid-video-en.html" target="_blank" rel="noopener noreferrer">Prebid Video — Between</a>. Официальный сайт: <a href="https://betweendigital.ru/" target="_blank" rel="noopener noreferrer">betweendigital.ru</a>. В теге и цепочке VAST часто встречаются хосты <code>between.ru</code>, <code>between.ai</code>, <code>ads.betweendigital.com</code>, <code>betweendigital.com</code> (CDN и ad server).</li>
-              <li><strong>Buzzoola, Hybrid, Soloway, Getintent, Amberdata, OTM</strong> — региональные видео SSP/DSP и performance; в ZiTeg они распознаются по домену из BASE или https-значений параметров — сверяйте макросы и требования с гайдом поставщика.</li>
+              <li><strong>Buzzoola, Hybrid, Soloway, Getintent, Amberdata, OTM</strong> — региональные видео SSP/DSP и performance; в ZiTag они распознаются по домену из BASE или https-значений параметров — сверяйте макросы и требования с гайдом поставщика.</li>
               <li><strong>Операторы и финтех</strong> — рекламные продукты на доменах операторов и банков (например МТС, Сбер) — уточняйте требования у поставщика.</li>
             </ul>
           </div>
@@ -302,7 +310,7 @@
 
     </main>
 
-  </div><!-- /panel-ziteg -->
+  </div><!-- /panel-zitag -->
 
   <!-- ══ TAB: ZiChecker ════════════════════════════════════ -->
   <div class="tab-panel" id="panel-zichecker">
@@ -447,10 +455,21 @@
               <button class="player-ctrl-btn" id="ctrl-seek-fwd" type="button" title="Вперёд 10 с (→)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 19 22 12 13 5 13 19"/><line x1="2" y1="19" x2="2" y2="5"/></svg>
               </button>
+              <button class="player-ctrl-btn" id="ctrl-captions" type="button" disabled title="В ролике нет дорожек субтитров" aria-label="Субтитры" aria-pressed="false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+              </button>
               <button class="player-ctrl-btn" id="ctrl-mute" title="Mute / Unmute">
                 <svg id="ctrl-mute-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
               </button>
               <input type="range" class="player-vol" id="ctrl-vol" min="0" max="1" step="0.05" value="1" title="Volume" />
+              <label class="player-rate-label" for="ctrl-playback-rate">playbackRate</label>
+              <select id="ctrl-playback-rate" class="player-playback-rate" title="playbackRate" aria-label="playbackRate">
+                <option value="0.5">0.5×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+              </select>
               <div class="player-ctrl-spacer"></div>
               <button class="player-ctrl-btn" id="ctrl-fullscreen" title="Имитировать Fullscreen">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -466,18 +485,24 @@
             <div id="player-vpaid-panel" class="player-vpaid-panel hidden">
               <div class="player-vpaid-panel-head">
                 <span class="player-vpaid-title">VPAID / интерактив</span>
-                <select id="vpaid-file-select" class="vpaid-file-select" aria-label="Ресурс VPAID или SIMID"></select>
-                <button type="button" class="btn ghost sm" id="vpaid-load-btn">Загрузить</button>
-                <button type="button" class="btn ghost sm" id="vpaid-stop-btn">Стоп</button>
+                <div class="player-vpaid-panel-actions">
+                  <button type="button" class="btn ghost sm" id="vpaid-reload-btn" title="Перезагрузить VPAID / iframe с тем же VAST">Перезагрузить</button>
+                  <button type="button" class="btn ghost sm" id="vpaid-toggle-mounts-btn" title="Скрыть или показать область iframe">Скрыть блок</button>
+                </div>
               </div>
-              <p class="player-vpaid-hint">Интерактив воспроизводится отдельно от основного &lt;video&gt;: подставляется весь ответ VAST (по URL тега или из XML в редакторе). Линейное видео (MP4/WebM) — в плеере выше; для SIMID/HTML используется встроенная песочница (iframe) ниже.</p>
+              <p class="player-vpaid-hint">После анализа VAST интерактив (VPAID / SIMID) обычно подгружается сам. Если в скрипте есть отдельный MP4 под верхний плеер, полный интерактив по умолчанию не запускаем — загрузите его кнопкой ниже (ролик останется на паузе до вашего Play).</p>
+              <div class="vpaid-deferred-load-row hidden" id="vpaid-deferred-load-row">
+                <button type="button" class="btn primary sm" id="vpaid-deferred-load-btn">Загрузить интерактив VPAID</button>
+              </div>
+              <div id="vpaid-interactive-mounts" class="vpaid-interactive-mounts">
               <div id="adfox-yandex-wrap" class="adfox-yandex-wrap hidden" aria-hidden="true">
                 <div id="adfox-yandex-video-parent" class="adfox-yandex-video-parent">
                   <video id="adfox-yandex-video" class="adfox-yandex-video" playsinline muted controls preload="metadata"></video>
                 </div>
               </div>
               <div id="vpaid-sandbox-wrap" class="vpaid-sandbox-wrap hidden" aria-hidden="true">
-                <iframe id="vpaid-sandbox-frame" class="vpaid-sandbox-frame" title="SIMID / HTML sandbox" sandbox="allow-scripts allow-same-origin"></iframe>
+                <iframe id="vpaid-sandbox-frame" class="vpaid-sandbox-frame" title="SIMID / HTML / VPAID sandbox" sandbox="allow-scripts allow-same-origin allow-forms" allowfullscreen></iframe>
+              </div>
               </div>
               <div id="vpaid-status" class="player-vpaid-status" role="status"></div>
             </div>
@@ -611,7 +636,7 @@
         <h2 id="chk-doc-title" class="vast-help-embed-title">Справка валидатора</h2>
         <p class="vast-help-embed-lead">Разметка XML VAST, события, медиа, коды ошибок и ожидания плееров. Официальная спецификация IAB — источник истины для продакшена.</p>
 
-        <details class="vast-help-block" open>
+        <details class="vast-help-block">
           <summary class="vast-help-summary">Версии VAST (2.x, 3.x, 4.x)</summary>
           <div class="vast-help-panel">
             <div class="table-scroll vast-ref-scroll">
@@ -625,6 +650,7 @@
               </table>
             </div>
             <p class="vast-ref-note">Многие SSP указывают VAST 3.x или 4.x; фактическая разметка должна соответствовать объявленной версии, иначе строгие SDK могут отклонить ответ.</p>
+            <p class="vast-help-tip">Ответ с объявленной <strong>VAST 2.x</strong> часть современных бирж и строгих плееров может не принять — для новых интеграций ориентируйтесь на 3.x или 4.x, если площадка это допускает.</p>
           </div>
         </details>
 
@@ -663,6 +689,8 @@
               </table>
             </div>
             <p>Для CTV и мобильных приложений чаще всего нужен <strong>MP4</strong> без VPAID; WebM на iOS не поддерживается.</p>
+            <p>Атрибуты <code>width</code> и <code>height</code> у прогрессивного видео помогают плееру выбрать подходящий вариант из нескольких <code>MediaFile</code>; без них часть SDK ведёт себя менее предсказуемо.</p>
+            <p>Корректный <code>type</code> (MIME), например <code>video/mp4</code>, снижает риск отказа при выборе декодера — особенно на TV-браузерах и встроенных плеерах.</p>
           </div>
         </details>
 
@@ -691,6 +719,15 @@
           <div class="vast-help-panel">
             <p>IMA подставляет макросы в URL трекеров (время просмотра, причина пропуска и т.д.). Набор зависит от версии SDK и политики Google. При отладке сравнивайте фактический HTTP-запрос с шаблоном в VAST и документацией IMA.</p>
             <p>На HTTPS-страницах все трекеры и медиа должны быть по <code>https://</code>, иначе возможны блокировки mixed content.</p>
+            <p class="vast-help-tip">Если в VAST есть <strong>VPAID</strong> (<code>application/javascript</code>, <code>apiFramework="VPAID"</code>), учитывайте среду показа: в <strong>Google IMA SDK 3.x</strong> классический VPAID по умолчанию отключён в пользу измеримости через <strong>OMID</strong> и интерактива через <strong>SIMID</strong>. Для плееров без IMA (свой HTML5, другие SDK) это не универсальное ограничение — сверяйтесь с гайдом площадки.</p>
+            <p>При цепочке <strong>Wrapper</strong> у IMA на каждый уровень действуют таймауты (порядка нескольких секунд) — глубокая вложенность повышает риск обрыва. Для выбора формата SDK чаще ориентируется на <code>video/mp4</code>; если в ответе только WebM или HLS без MP4, поведение зависит от версии и настроек плеера.</p>
+          </div>
+        </details>
+
+        <details class="vast-help-block">
+          <summary class="vast-help-summary">Инфраструктура и строка «Платформы» в сводке</summary>
+          <div class="vast-help-panel">
+            <p>Карточки в блоке «Инфраструктура» и строка compliance <strong>Платформы</strong> строятся по доменам из трекеров, медиа, цепочки врапперов и по тексту <code>&lt;AdSystem&gt;</code>. Это внутренний справочник по популярным SSP/DSP, а не вывод о настройке кампании — уточняйте макросы и требования у поставщика.</p>
           </div>
         </details>
 
@@ -707,7 +744,10 @@
         <details class="vast-help-block">
           <summary class="vast-help-summary">CTV, мобильные приложения и ограничения плееров</summary>
           <div class="vast-help-panel">
-            <p>На Smart TV и приставках часто <strong>нет</strong> полноценного JS/VPAID. Ориентируйтесь на <code>video/mp4</code> (progressive или поддерживаемый стриминг), избегайте обязательной зависимости от VPAID, проверяйте разрешение и битрейт под большой экран.</p>
+            <p>На Smart TV и приставках часто <strong>нет</strong> полноценного JS/VPAID. Ориентируйтесь на <code>video/mp4</code> (progressive или поддерживаемый стриминг), избегайте обязательной зависимости только от VPAID, проверяйте разрешение и битрейт под большой экран.</p>
+            <p>Если в одном InLine есть и <strong>VPAID</strong>, и обычный <code>video/mp4</code>, на типичном CTV-плеере чаще проиграется только MP4, а VPAID будет проигнорирован — это ограничение ТВ-среды, а не «ошибка» тега для веба.</p>
+            <p><strong>SIMID</strong> (<code>InteractiveCreativeFile</code>) и разметка <strong>NonLinear</strong> на большинстве CTV SDK не поддерживаются — рассчитывайте, что на приставке эти части не отработают.</p>
+            <p>В <strong>мобильных</strong> in-app плеерах (в т.ч. с IMA и др. SDK) классический VPAID часто недоступен; только WebM без MP4 на iOS обычно не воспроизводится — в сводке compliance остаются жёсткие пометки «только VPAID» / «только WebM», если в ответе нет подходящего видео для этих сред.</p>
             <p>В приложениях учитывайте ATS (iOS), политики сети (Android), обязательность рекламного идентификатора (GAID/IDFA) и корректность store URL.</p>
           </div>
         </details>

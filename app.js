@@ -291,7 +291,7 @@ const RULES = [
 ];
 
 // ─── History ─────────────────────────────────────────────────────────────────
-const HIST_KEY = 'zitek_hist_v1';
+const HIST_KEY = 'zitag_hist_v1';
 const HIST_MAX = 8;
 
 function saveHistory(url) {
@@ -331,7 +331,7 @@ let sortAsc = false;
 /** @param {string} id @returns {HTMLElement} */
 const $ = (id) => {
   const el = document.getElementById(id);
-  if (!el) throw new Error(`ZiTeg: элемент #${id} не найден`);
+  if (!el) throw new Error(`ZiTag: элемент #${id} не найден`);
   return el;
 };
 const vastInput = /** @type {HTMLInputElement} */ ($('vast-input'));
@@ -352,8 +352,8 @@ const outputEl    = $('output-url');
 const outBar      = $('out-bar');
 const toast       = $('toast');
 
-// ZiTeg stats bar
-const zitegStats  = $('ziteg-stats');
+// ZiTag stats bar
+const zitagStats  = $('zitag-stats');
 const tsDisabled  = $('ts-disabled');
 const tsParamsV   = $('ts-params-val');
 const tsMacrosV   = $('ts-macros-val');
@@ -582,7 +582,7 @@ function renderTopbar(issues) {
     tsStatusV.className = 'ts-v green';
   }
 
-  zitegStats.classList.remove('hidden');
+  zitagStats.classList.remove('hidden');
   tsDisabled.classList.toggle('hidden', disabled === 0);
 }
 
@@ -693,8 +693,8 @@ function addScanLine(tr) {
 
 // ─── Инфраструктура (домены из BASE и https-параметров) ───────────────────────
 function renderZitegInfra() {
-  const wrap = document.getElementById('ziteg-infra-wrap');
-  const body = document.getElementById('ziteg-infra-body');
+  const wrap = document.getElementById('zitag-infra-wrap');
+  const body = document.getElementById('zitag-infra-body');
   if (!wrap || !body) return;
   const fn = typeof window !== 'undefined' && window.analyzeAdInfrastructureFromVastTag;
   if (typeof fn !== 'function') {
@@ -732,9 +732,9 @@ function renderZitegInfra() {
     const hostEsc = baseHost ? esc(baseHost) : '—';
     const extraUrls = infra.scannedUrls > 1 ? infra.scannedUrls - 1 : 0;
     const extra = extraUrls > 0
-      ? ` Дополнительно проверено ${extraUrls} URL из значений параметров — совпадений с каталогом нет.`
+      ? ` Ещё ${extraUrls} ссылок из параметров — в справочнике тоже нет.`
       : '';
-    html += `<p class="ad-infra-empty">Хост <strong>${hostEsc}</strong> не найден в каталоге доменов SSP/DSP.${extra}</p>`;
+    html += `<p class="ad-infra-empty">Домен <strong>${hostEsc}</strong> не совпал со справочником SSP/DSP.${extra}</p>`;
   }
   body.innerHTML = html;
 }
@@ -811,8 +811,8 @@ btnClear.addEventListener('click', () => {
   resultSec.classList.add('hidden');
   outBar.classList.add('hidden');
   valBanner.className = 'val-bar hidden';
-  zitegStats.classList.add('hidden');
-  const zi = document.getElementById('ziteg-infra-wrap');
+  zitagStats.classList.add('hidden');
+  const zi = document.getElementById('zitag-infra-wrap');
   if (zi) zi.classList.add('hidden');
 });
 
@@ -883,6 +883,35 @@ const tabBtns      = document.querySelectorAll('.tab-btn');
 const tabPanels    = document.querySelectorAll('.tab-panel');
 const tabIndicator = $('tab-indicator');
 
+/** Публичные URL на zi-tech.ru и пути для History API / dev-сервера */
+const ZI_TECH_ZITAG = 'https://zi-tech.ru/digital/zitag';
+const ZI_TECH_ZICHECKER = 'https://zi-tech.ru/digital/zichecker';
+const PATH_ZITAG = '/digital/zitag';
+const PATH_ZICHECKER = '/digital/zichecker';
+
+function updateProductMeta(targetId) {
+  const canonical = document.getElementById('product-canonical');
+  if (canonical instanceof HTMLLinkElement) {
+    canonical.href = targetId === 'zichecker' ? ZI_TECH_ZICHECKER : ZI_TECH_ZITAG;
+  }
+  document.title = targetId === 'zichecker'
+    ? 'ZiChecker — валидатор VAST'
+    : 'ZiTag — Парсер VAST тегов';
+}
+
+function syncUrlPathForTab(targetId) {
+  if (typeof history === 'undefined' || typeof history.replaceState !== 'function') return;
+  try {
+    const nextPath = targetId === 'zichecker' ? PATH_ZICHECKER : PATH_ZITAG;
+    const u = new URL(window.location.href);
+    const cur = (u.pathname.replace(/\/$/, '') || '/');
+    const want = nextPath.replace(/\/$/, '');
+    if (cur === want) return;
+    u.pathname = nextPath;
+    history.replaceState(null, '', `${u.pathname}${u.search}${u.hash}`);
+  } catch { /* ignore */ }
+}
+
 function moveIndicator(btn) {
   tabIndicator.style.left  = btn.offsetLeft + 'px';
   tabIndicator.style.width = btn.offsetWidth + 'px';
@@ -899,15 +928,32 @@ function switchTab(targetId) {
   });
   const activeBtn = document.querySelector(`.tab-btn[data-tab="${targetId}"]`);
   if (activeBtn) moveIndicator(activeBtn);
-  // Панель URL — только на вкладке ZiTeg
-  if (targetId !== 'ziteg') outBar.classList.add('hidden');
+  updateProductMeta(targetId);
+  syncUrlPathForTab(targetId);
+  // Панель URL — только на вкладке ZiTag
+  if (targetId !== 'zitag') outBar.classList.add('hidden');
   else if (params.length) outBar.classList.remove('hidden');
+}
+
+function initTabFromPath() {
+  const p = (window.location.pathname || '/').replace(/\/$/, '') || '/';
+  const zc = PATH_ZICHECKER.replace(/\/$/, '');
+  const zt = PATH_ZITAG.replace(/\/$/, '');
+  if (p === zc || p.endsWith('/zichecker')) {
+    switchTab('zichecker');
+    return;
+  }
+  if (p === zt || (p.endsWith('/zitag') && !p.includes('zichecker'))) {
+    switchTab('zitag');
+  }
 }
 
 tabBtns.forEach(btn => {
   if (!(btn instanceof HTMLElement)) return;
-  btn.addEventListener('click', () => switchTab(btn.dataset.tab || 'ziteg'));
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab || 'zitag'));
 });
+
+initTabFromPath();
 
 // Init indicator position on first load
 requestAnimationFrame(() => {
@@ -916,7 +962,7 @@ requestAnimationFrame(() => {
 });
 
 // ─── Темы оформления ─────────────────────────────────────────────────────────
-const THEME_KEY = 'ziteg_theme_v1';
+const THEME_KEY = 'zitag_theme_v1';
 const THEME_PRESETS = ['ember', 'depth', 'obsidian', 'frost', 'silver'];
 
 function applyTheme(preset) {
@@ -948,7 +994,7 @@ function applyTheme(preset) {
 })();
 
 // ─── Сворачиваемые блоки (localStorage) ───────────────────────────────────────
-const COLLAPSE_PREFS_KEY = 'ziteg_collapse_v1';
+const COLLAPSE_PREFS_KEY = 'zitag_collapse_v1';
 
 function loadCollapsePrefs() {
   try {

@@ -1,5 +1,5 @@
 {
-  "name": "ziteg-vast",
+  "name": "zitag-vast",
   "private": true,
   "scripts": {
     "start": "node server.js",

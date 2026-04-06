@@ -55,6 +55,13 @@ const server = http.createServer((req, res) => {
 
   if (pathname === '/' || pathname === '') pathname = '/index.html';
 
+  /** SPA: те же пути, что на zi-tech.ru/digital/… */
+  const digitalSpa = new Set([
+    '/digital/zitag', '/digital/zitag/',
+    '/digital/zichecker', '/digital/zichecker/',
+  ]);
+  if (digitalSpa.has(pathname)) pathname = '/index.html';
+
   const filePath = path.join(ROOT, path.normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, ''));
   const resolvedRoot = path.resolve(ROOT);
   const resolvedFile = path.resolve(filePath);
@@ -84,5 +91,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`ZiTeg: http://localhost:${PORT}/`);
+  console.log(`ZiTag: http://localhost:${PORT}/`);
 });

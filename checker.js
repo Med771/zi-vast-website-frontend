@@ -26,6 +26,8 @@ const EVENT_GROUPS = [
       { key: 'mute',          label: 'Mute',           vast: 'Tracking' },
       { key: 'unmute',        label: 'Unmute',         vast: 'Tracking' },
       { key: 'fullscreen',    label: 'Fullscreen',     vast: 'Tracking' },
+      { key: 'exitFullscreen', label: 'Exit Fullscreen', vast: 'Tracking' },
+      { key: 'playbackRate', label: 'playbackRate', vast: 'Tracking' },
       { key: 'skip',          label: 'Skip',           vast: 'Tracking' },
       { key: 'clickThrough',  label: 'Click Through',  vast: 'ClickThrough' },
       { key: 'clickTracking', label: 'Click Tracking', vast: 'ClickTracking' },
@@ -54,6 +56,20 @@ const EVENT_GROUPS = [
 ];
 
 const ALL_EVENTS_FLAT = EVENT_GROUPS.flatMap(g => g.events);
+
+/**
+ * Значение атрибута event у &lt;Tracking&gt; → канонический ключ из EVENT_GROUPS.
+ * Иначе разный регистр (например PlaybackRate vs playbackRate) даёт отдельные ключи в eventMap и в схеме «не задан».
+ */
+function canonicalTrackingEventName(raw) {
+  const t = String(raw ?? '').trim();
+  if (!t) return t;
+  const lower = t.toLowerCase();
+  for (const def of ALL_EVENTS_FLAT) {
+    if (def.key.toLowerCase() === lower) return def.key;
+  }
+  return t;
+}
 
 /**
  * В VAST Linear трекеры задаются как &lt;Tracking event="start|firstQuartile|…"&gt;,
@@ -95,6 +111,12 @@ function getMediaBuckets(mediaFiles = []) {
     interactives: mediaFiles.filter(m => m.kind === 'interactive'),
     nonLinears: mediaFiles.filter(m => m.kind === 'nonlinear'),
   };
+}
+
+/** В Linear только VPAID (нет отдельного video MediaFile): Impression / Linear Tracking часто зашиты в vpaid.js, не в VAST. */
+function isVpaidOnlyLinearCreative(mediaFiles) {
+  const { vpaidFiles, videoFiles } = getMediaBuckets(mediaFiles || []);
+  return vpaidFiles.length > 0 && videoFiles.length === 0;
 }
 
 let _nativeHlsCached;
@@ -249,15 +271,17 @@ const chkXmlStatus = chk$('chk-xml-status');
 const chkSpecBody = chk$('chk-spec-body');
 
 const vpaidPanel = chk$('player-vpaid-panel');
-const vpaidFileSelect = /** @type {HTMLSelectElement} */ (chk$('vpaid-file-select'));
-const vpaidLoadBtn = chk$('vpaid-load-btn');
-const vpaidStopBtn = chk$('vpaid-stop-btn');
 const vpaidSandboxFrame = /** @type {HTMLIFrameElement} */ (chk$('vpaid-sandbox-frame'));
 const vpaidSandboxWrap = chk$('vpaid-sandbox-wrap');
 const adfoxYandexWrap = chk$('adfox-yandex-wrap');
 const adfoxYandexVideo = /** @type {HTMLVideoElement} */ (chk$('adfox-yandex-video'));
 const adfoxYandexVideoParent = chk$('adfox-yandex-video-parent');
 const vpaidStatus = chk$('vpaid-status');
+const vpaidInteractiveMounts = document.getElementById('vpaid-interactive-mounts');
+const vpaidToggleMountsBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('vpaid-toggle-mounts-btn'));
+const vpaidReloadBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('vpaid-reload-btn'));
+const vpaidDeferredLoadRow = document.getElementById('vpaid-deferred-load-row');
+const vpaidDeferredLoadBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('vpaid-deferred-load-btn'));
 
 /** @type {Promise<void> | null} */
 let yandexAdsdkLoadPromise = null;
@@ -484,7 +508,7 @@ async function loadYandexVastAdPlayback() {
 
     adPlaybackController.playAd();
     attachYandexAdVideoDomFeedListeners();
-    vpaidStatus.textContent = 'Воспроизведение рекламы (Yandex Ad SDK)…';
+    vpaidStatus.textContent = 'Yandex Ad SDK: реклама запущена (без принудительной паузы — иначе ломается логика части креативов).';
   } catch (err) {
     const e = /** @type {any} */ (err);
     const t = e && e.message != null ? String(e.message) : String(err);
@@ -584,7 +608,7 @@ chkModeUrl.addEventListener('click', () => switchChkMode('url'));
 chkModeXml.addEventListener('click', () => switchChkMode('xml'));
 switchChkMode('url');
 
-const CHK_XML_COLLAPSE_KEY = 'ziteg_chk_xml_collapsed_v1';
+const CHK_XML_COLLAPSE_KEY = 'zitag_chk_xml_collapsed_v1';
 const chkXmlPanel = document.getElementById('chk-xml-panel');
 const chkXmlToggle = document.getElementById('chk-xml-toggle');
 const chkXmlPanelBody = document.getElementById('chk-xml-panel-body');
@@ -653,6 +677,34 @@ function stripUtf8Bom(/** @type {string} */ s) {
   return String(s).replace(/^\uFEFF/, '');
 }
 
+/** Пространство имён Word 2003 XML (текст креатива часто режется по &lt;w:t&gt; с экранированным VAST внутри). */
+const WORDML_2003_NS = 'http://schemas.microsoft.com/office/word/2003/wordml';
+
+/**
+ * Извлекает склеенный VAST из «Word XML» (.xml из «Сохранить как Word 2003 XML» и аналогов):
+ * в узлах w:t лежит текст с &lt;VAST…&gt;; в DOM он уже декодирован в угловые скобки.
+ * NBSP (U+00A0) между токенами разметки заменяем на обычный пробел — иначе XML 1.0 не считает его пробельным.
+ * @returns {string|null}
+ */
+function tryExtractVastFromWordMl(/** @type {string} */ raw) {
+  const s = String(raw);
+  if (!/<\s*w:wordDocument\b/i.test(s) && !/schemas\.microsoft\.com\/office\/word\/2003\/wordml/i.test(s)) return null;
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(s.trim(), 'text/xml');
+  } catch {
+    return null;
+  }
+  if (doc.querySelector('parsererror')) return null;
+  const nodes = doc.getElementsByTagNameNS(WORDML_2003_NS, 't');
+  if (!nodes.length) return null;
+  let out = '';
+  for (let i = 0; i < nodes.length; i++) out += nodes[i].textContent || '';
+  const trimmed = out.replace(/\u00A0/g, ' ').trim();
+  if (!/<VAST[\s>]/i.test(trimmed)) return null;
+  return trimmed;
+}
+
 /**
  * Вырезает документ VAST из произвольного текста (например .txt / text/plain с префиксом или комментарием до XML).
  * VMAP (корень vmap:VMAP / VMAP с вложенным VAST): нельзя начинать с &lt;?xml и обрезать по &lt;/VAST&gt; — остаются незакрытые теги VMAP, XML невалиден.
@@ -660,7 +712,9 @@ function stripUtf8Bom(/** @type {string} */ s) {
  * @returns {string|null} well-formed фрагмент VAST или хвост с &lt;?xml без VAST, либо null
  */
 function extractVastXmlFromText(/** @type {string} */ raw) {
-  const t = stripUtf8Bom(String(raw));
+  const t0 = stripUtf8Bom(String(raw));
+  const fromWord = tryExtractVastFromWordMl(t0);
+  const t = fromWord != null ? fromWord : t0;
   const vastIdx = t.search(/<VAST[\s>]/i);
   if (vastIdx !== -1) {
     const slice = t.slice(vastIdx);
@@ -769,11 +823,13 @@ function serializeXmlElement(el, depth) {
 /** Форматирует VAST/XML с отступами (только well-formed). */
 function formatVastXml(xmlStr) {
   const trimmed = xmlStr.trim();
-  const doc = new DOMParser().parseFromString(trimmed, 'text/xml');
+  const fromWord = tryExtractVastFromWordMl(trimmed);
+  const toParse = fromWord != null ? extractVastXmlFromText(fromWord) || fromWord : trimmed;
+  const doc = new DOMParser().parseFromString(toParse, 'text/xml');
   if (doc.querySelector('parsererror')) throw new Error('Невалидный XML');
   const root = doc.documentElement;
   if (!root) throw new Error('Пустой документ');
-  const decl = trimmed.match(/^<\?xml[\s\S]*?\?>\s*/i);
+  const decl = toParse.match(/^<\?xml[\s\S]*?\?>\s*/i);
   const body = serializeXmlElement(root, 0);
   return (decl ? decl[0].trimEnd() + '\n' : '') + body;
 }
@@ -857,41 +913,52 @@ function buildVastProfile(doc, declaredVersion) {
 /**
  * SSP (в т.ч. Яндекс) иногда передают MP4/HLS/WebM в JSON внутри &lt;AdParameters&gt;,
  * а в &lt;MediaFile&gt; оставляют только VPAID-loader.
+ * Поддерживаются массивы <code>mediaFiles</code> и <code>videos</code> (как у MediaVitrina: mimetype + url).
  * @param {string|null|undefined} raw
  */
 function extractLinearMediaFromAdParametersJson(raw) {
   if (!raw || typeof raw !== 'string') return [];
   const trimmed = raw.trim();
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return [];
+  /** CDATA часто даёт отступы/переносы до «{» — иначе MP4 из videos[] не мержится и плеер пуст при одном VPAID MediaFile. */
+  let slice = trimmed;
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    const iBrace = trimmed.indexOf('{');
+    const iBracket = trimmed.indexOf('[');
+    let start = -1;
+    if (iBrace >= 0 && iBracket >= 0) start = Math.min(iBrace, iBracket);
+    else start = Math.max(iBrace, iBracket);
+    if (start < 0) return [];
+    slice = trimmed.slice(start);
+  }
   let parsed;
   try {
-    parsed = JSON.parse(trimmed);
+    parsed = JSON.parse(slice);
   } catch {
-    const i = trimmed.indexOf('{');
-    const j = trimmed.lastIndexOf('}');
+    const i = slice.indexOf('{');
+    const j = slice.lastIndexOf('}');
     if (i < 0 || j <= i) return [];
     try {
-      parsed = JSON.parse(trimmed.slice(i, j + 1));
+      parsed = JSON.parse(slice.slice(i, j + 1));
     } catch {
       return [];
     }
   }
-  const arr = parsed && Array.isArray(parsed.mediaFiles) ? parsed.mediaFiles : null;
-  if (!arr || !arr.length) return [];
+  if (!parsed || typeof parsed !== 'object') return [];
 
   const out = [];
   const seen = new Set();
-  for (const item of arr) {
-    if (!item || typeof item !== 'object') continue;
-    const url = String(item.url || '').trim();
-    if (!url) continue;
-    if (seen.has(url)) continue;
-    const type = String(item.type || '').trim();
-    const lowType = type.toLowerCase();
-    if (lowType.includes('javascript') || /vpaid/i.test(lowType)) continue;
-    const probe = { url, type, api: String(item.apiFramework || item.api || '').trim(), kind: 'media' };
-    if (isVpaidLike(probe)) continue;
 
+  function pushItem(/** @type {Record<string, unknown>} */ item) {
+    if (!item || typeof item !== 'object') return;
+    const url = String(item.url || '').trim();
+    if (!url || seen.has(url)) return;
+    const type = String(
+      item.type || item.mimetype || item.mimeType || item.mime || '',
+    ).trim();
+    const lowType = type.toLowerCase();
+    if (lowType.includes('javascript') || /vpaid/i.test(lowType)) return;
+    const probe = { url, type, api: String(item.apiFramework || item.api || '').trim(), kind: 'media' };
+    if (isVpaidLike(probe)) return;
     seen.add(url);
     out.push({
       url,
@@ -905,6 +972,12 @@ function extractLinearMediaFromAdParametersJson(raw) {
       source: 'adParameters',
     });
   }
+
+  const mf = Array.isArray(parsed.mediaFiles) ? parsed.mediaFiles : null;
+  const vids = Array.isArray(parsed.videos) ? parsed.videos : null;
+  if (mf) mf.forEach((it) => pushItem(/** @type {Record<string, unknown>} */ (it)));
+  if (vids) vids.forEach((it) => pushItem(/** @type {Record<string, unknown>} */ (it)));
+
   return out;
 }
 
@@ -956,16 +1029,18 @@ function parseVAST(xmlStr) {
   // ── Event map ──
   const eventMap = {};
 
-  const impressions = [...doc.querySelectorAll('Impression')].map(el => el.textContent.trim()).filter(Boolean);
+  const impressionEls = [...doc.querySelectorAll('Impression')];
+  const impressions = impressionEls.map(el => el.textContent.trim()).filter(Boolean);
   if (impressions.length) eventMap['Impression'] = impressions;
 
   const errors = [...doc.querySelectorAll('Error')].map(el => el.textContent.trim()).filter(Boolean);
   if (errors.length) eventMap['error'] = errors;
 
   doc.querySelectorAll('Tracking').forEach(el => {
-    const ev  = el.getAttribute('event');
+    const evRaw = el.getAttribute('event');
     const url = el.textContent.trim();
-    if (!ev || !url) return;
+    if (!evRaw || !url) return;
+    const ev = canonicalTrackingEventName(evRaw);
     if (!eventMap[ev]) eventMap[ev] = [];
     eventMap[ev].push(url);
   });
@@ -1015,6 +1090,9 @@ function parseVAST(xmlStr) {
 
   // ── VPAID detection ──
   const isVPAID = mediaFiles.some(isVpaidLike) || interactiveFiles.length > 0;
+  const hasVpaidLinear = mediaFiles.some(isVpaidLike);
+  const hasNonVpaidLinear = mediaFiles.some(m => !isVpaidLike(m));
+  const vpaidOnlyLinear = hasVpaidLinear && !hasNonVpaidLinear;
 
   // ── Flat trackers list ──
   const trackers = buildTrackers(eventMap);
@@ -1033,20 +1111,71 @@ function parseVAST(xmlStr) {
   } else if (ads.length > 1) {
     issues.push({ level: 'warn', msg: `Несколько <Ad> (${ads.length}) — многие плееры обрабатывают только первое объявление` });
   }
-  if (!impressions.length)   issues.push({ level: 'error', msg: 'Нет ни одного <Impression> пикселя (обязательный элемент VAST)' });
-  if (!errors.length)        issues.push({ level: 'warn',  msg: 'Не задан <Error> URL — по IAB рекомендуется для передачи кодов ошибок ([ERRORCODE])' });
-  if (!eventMap['start'])    issues.push({ level: 'warn',  msg: 'Отсутствует трекер события start' });
-  if (!eventMap['complete']) issues.push({ level: 'warn',  msg: 'Отсутствует трекер события complete' });
-
-  const missingQuartiles = ['firstQuartile', 'midpoint', 'thirdQuartile'].filter(k => !eventMap[k]);
-  if (adType === 'InLine' && linearEl && mediaFiles.length && missingQuartiles.length) {
+  if (!impressionEls.length) {
+    if (adType === 'InLine' && vpaidOnlyLinear) {
+      issues.push({
+        level: 'info',
+        msg: 'Нет элемента <Impression> в XML — для VPAID-only креатива пиксель показа и метки часто вызываются из vpaid.js (AdImpression и др.); в ленте трекеров URL не будет, пока не отдаёте их в VAST.',
+      });
+    } else {
+      issues.push({ level: 'error', msg: 'Нет элемента <Impression> — по VAST обязателен URL пикселя показа' });
+    }
+  } else if (!impressions.length) {
+    if (adType === 'InLine' && vpaidOnlyLinear) {
+      issues.push({
+        level: 'info',
+        msg: '<Impression> без URL в XML — пустой тег; при VPAID-only показ и события нередко уходят из скрипта плеера. Для явного пикселя в отчётах SSP добавьте URL в <Impression>.',
+      });
+    } else {
+      issues.push({
+        level: 'error',
+        msg: '<Impression> без URL (пустой тег) — Impression в ленте не к чему привязать; в вашем XML тег есть, CDATA с URL нет',
+      });
+    }
+  }
+  if (!errors.length) {
     issues.push({
-      level: 'warn',
-      msg: `Нет квартильных Tracking: ${missingQuartiles.join(', ')} — для отчётности и бирж обычно требуются все три + start/complete`,
+      level: adType === 'InLine' && vpaidOnlyLinear ? 'info' : 'warn',
+      msg: 'Не задан <Error> URL — по IAB рекомендуется для передачи кодов ошибок ([ERRORCODE])',
+    });
+  }
+  if (!eventMap['start']) {
+    issues.push({
+      level: adType === 'InLine' && vpaidOnlyLinear ? 'info' : 'warn',
+      msg: adType === 'InLine' && vpaidOnlyLinear
+        ? 'В XML нет трекера start — у VPAID прогресс часто шлётся событиями AdVideoStart / VPAID из vpaid.js, а не <Tracking event="start">.'
+        : 'Отсутствует трекер события start',
+    });
+  }
+  if (!eventMap['complete']) {
+    issues.push({
+      level: adType === 'InLine' && vpaidOnlyLinear ? 'info' : 'warn',
+      msg: adType === 'InLine' && vpaidOnlyLinear
+        ? 'В XML нет трекера complete — для VPAID типичен AdVideoComplete из скрипта; в ленте checker без URL в VAST это не видно.'
+        : 'Отсутствует трекер события complete',
     });
   }
 
-  const hasNonVpaidLinear = mediaFiles.some(m => !isVpaidLike(m));
+  if (adType === 'InLine' && linearEl && hasVpaidLinear && !linearEl.querySelector('Tracking')) {
+    issues.push({
+      level: 'info',
+      msg: 'В <Linear> нет <Tracking> — в XML не заданы URL событий. У VPAID счётчики часто шлют из vpaid.js: в ленте будет пометка «пиксели в VPAID»; сами запросы — вкладка Network (F12). Чтобы URL появились в ленте, добавьте <Tracking> в VAST.',
+    });
+  }
+
+  const missingQuartiles = ['firstQuartile', 'midpoint', 'thirdQuartile'].filter(k => !eventMap[k]);
+  if (adType === 'InLine' && linearEl && hasNonVpaidLinear && missingQuartiles.length) {
+    issues.push({
+      level: 'warn',
+      msg: `Не хватает квартильных трекеров: ${missingQuartiles.join(', ')}. Обычно нужны все три (25% / 50% / 75%) плюс start и complete.`,
+    });
+  } else if (adType === 'InLine' && linearEl && vpaidOnlyLinear && missingQuartiles.length) {
+    issues.push({
+      level: 'info',
+      msg: `В XML нет квартильных <Tracking> (${missingQuartiles.join(', ')}). Для VPAID-only квартали часто уходят как AdVideoFirstQuartile / Midpoint / ThirdQuartile из vpaid.js — checker не извлекает URL из JS.`,
+    });
+  }
+
   if (adType === 'InLine' && linearEl && hasNonVpaidLinear && !eventMap['clickThrough']?.length) {
     issues.push({ level: 'warn', msg: 'Нет <ClickThrough> у линейного креатива — клик по видео может быть недоступен в части SDK' });
   }
@@ -1327,9 +1456,9 @@ function buildAdInfraHtml(data, opts = {}) {
     const n = infra.scannedUrls || 0;
     const adSys = data.adSystem ? escChk(String(data.adSystem)) : '';
     const adSysLine = adSys
-      ? ` &lt;AdSystem&gt;: <strong>${adSys}</strong>.`
+      ? ` В ответе указан AdSystem: <strong>${adSys}</strong>.`
       : '';
-    html += `<p class="ad-infra-empty">Проверено ${n} URL — совпадений с каталогом SSP/DSP нет.${adSysLine}</p>`;
+    html += `<p class="ad-infra-empty">По ${n} ссылкам из VAST знакомых площадок в справочнике нет.${adSysLine}</p>`;
   }
   html += '</div>';
   return html;
@@ -1440,8 +1569,8 @@ function renderChkValidation(issues) {
   const errs  = issues.filter(i => i.level === 'error');
   const warns = issues.filter(i => i.level === 'warn');
   const infos = issues.filter(i => i.level === 'info');
-  const cls   = errs.length ? 'error' : (warns.length || infos.length) ? 'warn' : 'ok';
-  const icon  = errs.length ? '✗' : '⚠';
+  const cls   = errs.length ? 'error' : warns.length ? 'warn' : 'ok';
+  const icon  = errs.length ? '✗' : warns.length ? '⚠' : infos.length ? 'ⓘ' : '✓';
   let title;
   if (errs.length) {
     title = `${errs.length} ошибк${errs.length === 1 ? 'а' : errs.length < 5 ? 'и' : ''}`;
@@ -1455,6 +1584,18 @@ function renderChkValidation(issues) {
   chkValBar.className = `val-bar ${cls}`;
   chkValBar.innerHTML = `<div class="vt">${icon} ${title}</div><ul>${issues.map(i => `<li>${escChk(i.msg)}</li>`).join('')}</ul>`;
   chkValBar.classList.remove('hidden');
+}
+
+/** URL для узла схемы: прямой ключ + совпадение без учёта регистра (наследие до canonicalTrackingEventName). */
+function urlsFromEventMapForKey(/** @type {Record<string, string[]>|undefined} */ em, /** @type {string} */ key) {
+  if (!em || !key) return [];
+  const direct = em[key];
+  if (direct && direct.length) return direct;
+  const lower = key.toLowerCase();
+  for (const k of Object.keys(em)) {
+    if (k.toLowerCase() === lower && em[k]?.length) return em[k];
+  }
+  return [];
 }
 
 // ─── Render event flow ────────────────────────────────────────────────────────
@@ -1474,7 +1615,7 @@ function renderFlow(data) {
     group.events.forEach((ev, i) => {
       const urls   = group.label === 'VPAID / Интерактив'
         ? vastEventMapUrls(eventMap, ev.key)
-        : (eventMap[ev.key] || []);
+        : urlsFromEventMapForKey(eventMap, ev.key);
       const count  = urls.length;
       const hasIt  = count > 0;
       const isErr  = group.label === 'Ошибки';
@@ -1486,6 +1627,7 @@ function renderFlow(data) {
           <div class="flow-dot ${dotCls}">${hasIt ? (count > 9 ? '9+' : count) : '—'}</div>
           <div class="flow-info">
             <div class="flow-name">${ev.label}</div>
+            ${ev.flowHint ? `<div class="flow-hint">${escChk(ev.flowHint)}</div>` : ''}
             ${hasIt
               ? `<div class="flow-count has">${count} URL${count > 1 ? 's' : ''}</div>`
               : `<div class="flow-count">не задан</div>`}
@@ -1495,13 +1637,6 @@ function renderFlow(data) {
     html += `</div>`;
   });
   html += '</div>';
-
-  if (isVPAID) {
-    html += `<p class="flow-sdk-note">В ленту при воспроизведении через <strong>Yandex Ad SDK</strong> могут попадать
-      <strong>AdStarted</strong> (старт креатива), <strong>AdPodStarted</strong> (старт рекламного пода),
-      <strong>AdPodImpression</strong> (показ в поде) — это события плеера SDK, в XML они не описываются и в схеме не показываются.
-      Узлы <strong>AdVideo*</strong> ниже соответствуют тем же URL, что и <strong>start / quartile / complete</strong> в блоке «Прогресс», если в VAST указаны только стандартные имена Linear Tracking.</p>`;
-  }
 
   chkFlow.innerHTML = html;
   rebuildFlowNodeCache();
@@ -1633,6 +1768,7 @@ function generateRootCause(data) {
   });
 
   const { linearFiles, vpaidFiles, videoFiles, interactives } = getMediaBuckets(data.mediaFiles);
+  const vpaidOnlyLinear = isVpaidOnlyLinearCreative(data.mediaFiles);
 
   // No media at all
   if (!linearFiles.length && !interactives.length) {
@@ -1642,26 +1778,40 @@ function generateRootCause(data) {
   // VPAID-only
   if (vpaidFiles.length > 0 && videoFiles.length === 0 && interactives.length === 0) {
     add('error', 'Только VPAID', `${vpaidFiles.length} файл(ов) VPAID, видеофайлов нет — воспроизведение зависит от SDK плеера`);
-  } else if (vpaidFiles.length > 0) {
-    add('warn', `VPAID + видео (${vpaidFiles.length}+${videoFiles.length})`, 'VPAID не воспроизводится в браузере напрямую, но обычные MediaFile присутствуют');
   }
 
   // Impression missing
   if (!data.eventMap['Impression']?.length) {
-    add('error', 'Нет <Impression> пикселя', 'Показ рекламы не будет засчитан — обязательный элемент отсутствует');
+    if (vpaidOnlyLinear && data.adType === 'InLine') {
+      add('info', 'Нет URL показа в <Impression>', 'Для VPAID-only в XML часто пустой <Impression>; пиксель и метки могут вызываться из vpaid.js (IAB VPAID 2.0). Проверяйте Network при проигровке или требуйте явные URL у поставщика.');
+    } else {
+      add('error', 'Нет <Impression> пикселя', 'Показ рекламы не будет засчитан — обязательный элемент отсутствует');
+    }
   }
 
   // Error URL missing
   if (!data.eventMap['error']?.length) {
-    add('warn', 'Нет <Error> URL', 'Ошибки плеера не будут отслежены — <Error> URL не задан');
+    add(vpaidOnlyLinear && data.adType === 'InLine' ? 'info' : 'warn', 'Нет <Error> URL', 'Ошибки плеера не будут отслежены — <Error> URL не задан');
   }
 
   // Start/Complete
   if (!data.eventMap['start']) {
-    add('warn', 'Нет трекера start', 'Начало воспроизведения не будет подтверждено — верификация невозможна');
+    add(
+      vpaidOnlyLinear && data.adType === 'InLine' ? 'info' : 'warn',
+      'Нет трекера start в VAST',
+      vpaidOnlyLinear && data.adType === 'InLine'
+        ? 'Для VPAID-only start/прогресс часто идут из vpaid.js (AdVideoStart и др.), а не из <Tracking event="start"> в XML.'
+        : 'Начало воспроизведения не будет подтверждено — верификация невозможна',
+    );
   }
   if (!data.eventMap['complete']) {
-    add('warn', 'Нет трекера complete', 'Досмотр до конца не будет зафиксирован');
+    add(
+      vpaidOnlyLinear && data.adType === 'InLine' ? 'info' : 'warn',
+      'Нет трекера complete в VAST',
+      vpaidOnlyLinear && data.adType === 'InLine'
+        ? 'Для VPAID-only завершение часто шлётся как AdVideoComplete из скрипта плеера.'
+        : 'Досмотр до конца не будет зафиксирован',
+    );
   }
 
   // Duration
@@ -1745,30 +1895,32 @@ function generateCompliance(data) {
   const adInfra = data.adInfra;
   if (adInfra && adInfra.items && adInfra.items.length) {
     const preview = adInfra.items.slice(0, 4).map(i => i.name).join(', ');
-    add('Платформы', 'info', `Распознано: ${preview}${adInfra.items.length > 4 ? '…' : ''}`,
-      'По доменам трекеров, медиа, врапперов и тексту <AdSystem> (популярные РФ/СНГ и международные SSP/DSP). Уточняйте требования у поставщика.');
+    add('Платформы', 'info', `Распознано: ${preview}${adInfra.items.length > 4 ? '…' : ''}`, '');
   }
 
-  const { linearFiles, vpaidFiles, videoFiles, interactives, nonLinears } = getMediaBuckets(data.mediaFiles);
+  const { linearFiles, vpaidFiles, videoFiles } = getMediaBuckets(data.mediaFiles);
   const allUrls      = Object.values(data.eventMap).flat();
   const hasHttp      = allUrls.some(u => u.startsWith('http://'));
-  const mp4Files     = videoFiles.filter(m => /mp4/i.test(m.type) || /\.mp4(\?|$)/i.test(m.url));
   const webmOnly     = videoFiles.length > 0 && videoFiles.every(m => /webm/i.test(m.type) || /\.webm(\?|$)/i.test(m.url));
-  const version      = parseFloat(data.version) || 0;
   const lowBitrateOnly = videoFiles.length > 0 && videoFiles.every(m => { const b = parseInt(m.bitrate)||0; return b > 0 && b < 800; });
 
   // ── IAB VAST spec ──
   if (!data.adSystem) add('IAB VAST', 'warn', '<AdSystem> отсутствует', 'Элемент обязателен по спецификации VAST для идентификации рекламной системы');
   if (!data.adTitle && data.adType === 'InLine') add('IAB VAST', 'info', '<AdTitle> отсутствует', 'Рекомендован для идентификации объявления');
-  if (!data.eventMap['Impression']?.length) add('IAB VAST', 'error', 'Нет <Impression>', 'Обязательный элемент — без него показ не засчитается');
+  if (!data.eventMap['Impression']?.length) {
+    if (isVpaidOnlyLinearCreative(data.mediaFiles) && data.adType === 'InLine') {
+      add('IAB VAST', 'info', 'Нет URL в <Impression> (VPAID-only Linear)', 'По IAB в VAST элемент ожидается; на практике при одном VPAID MediaFile показ и счётчики нередко реализованы внутри vpaid.js. Для бирж, требующих явный пиксель в XML, добавьте URL в <Impression>.');
+    } else {
+      add('IAB VAST', 'error', 'Нет <Impression>', 'Обязательный элемент — без него показ не засчитается');
+    }
+  }
   if (!data.duration && linearFiles.length) add('IAB VAST', 'warn', 'Нет <Duration>', 'Обязателен в <Linear> согласно VAST 3+');
   if (!data.eventMap['error']?.length) add('IAB VAST', 'info', 'Нет <Error> URL', 'Рекомендован для отслеживания ошибок воспроизведения');
-  if (version > 0 && version < 3.0) add('IAB VAST', 'warn', `VAST ${data.version} — устаревшая версия`, 'VAST 4.x рекомендован IAB. Некоторые SSP не поддерживают 2.x');
 
   const em = data.eventMap || {};
   const missQ = ['firstQuartile', 'midpoint', 'thirdQuartile'].filter(k => !em[k]);
   if (data.adType === 'InLine' && missQ.length && videoFiles.length) {
-    add('IAB / биржи', 'warn', `Нет квартильных событий: ${missQ.join(', ')}`, 'OpenRTB/SSP часто ожидают полный набор progress + start/complete для биллинга');
+    add('IAB / биржи', 'warn', `Нет квартилей: ${missQ.join(', ')}`, 'Часто требуют first/mid/third и ещё start + complete для отчётности');
   }
   if (data.adType === 'InLine' && videoFiles.length && !em.clickThrough?.length) {
     add('IAB VAST', 'warn', 'Нет ClickThrough у видеокреатива', 'Для кликабельной in-stream рекламы элемент рекомендован; без него часть SDK не откроет целевую страницу');
@@ -1778,36 +1930,21 @@ function generateCompliance(data) {
   }
   const noMime = videoFiles.filter(m => !m.type || m.type === 'video/');
   if (noMime.length) {
-    add('IAB / плееры', 'warn', `${noMime.length} MediaFile без корректного type`, 'MIME (например video/mp4) помогает выбрать декодер; без него растут отказы на CTV/TV-браузерах');
-  }
-  if (data.adType === 'InLine' && linearFiles.some(m => !isVpaidLike(m))) {
-    const noWH = linearFiles.filter(m => !isVpaidLike(m) && (!m.width || !m.height));
-    if (noWH.length) {
-      add('IAB VAST', 'info', 'У MediaFile не заданы width/height', 'Атрибуты рекомендованы для подбора варианта под размер плеера');
-    }
+    add('IAB / плееры', 'warn', `${noMime.length} MediaFile без корректного type`, 'Укажите MIME (например video/mp4), чтобы плеер стабильнее выбирал декодер.');
   }
 
   // ── Google IMA SDK ──
   if (hasHttp) add('Google IMA', 'error', 'HTTP URLs (Mixed Content)', 'Google IMA на HTTPS-страницах блокирует все http:// пиксели и медиафайлы');
-  if (vpaidFiles.length > 0) add('Google IMA', 'warn', 'VPAID обнаружен', 'Google IMA SDK 3.x отключил VPAID по умолчанию — используйте OMID/SIMID');
-  if (data.chain && data.chain.length > 3) add('Google IMA', 'warn', `Цепочка ${data.chain.length} уровней`, 'Google IMA имеет таймаут на разрешение враперов (~3 сек на уровень)');
-  if (linearFiles.length > 0 && mp4Files.length === 0) add('Google IMA', 'warn', 'Нет MP4-файла', 'Google IMA SDK предпочитает video/mp4 — без него выбор формата нестабилен');
 
-  // ── CTV / OTT ──
+  // ── CTV / OTT (в сводке остаются жёсткие случаи; ориентиры по VPAID+MP4, SIMID, NonLinear — в справке) ──
   if (vpaidFiles.length > 0 && videoFiles.length === 0) {
     add('CTV / OTT', 'error', 'Только VPAID — не воспроизведётся', 'VPAID не поддерживается ни на одной CTV-платформе (Roku, Fire TV, Apple TV)');
-  } else if (vpaidFiles.length > 0) {
-    add('CTV / OTT', 'warn', 'VPAID среди MediaFiles', 'VPAID-файлы будут проигнорированы CTV-плеером; воспроизведение продолжится через MP4');
   }
-  if (interactives.length > 0) add('CTV / OTT', 'warn', 'SIMID/InteractiveCreativeFile', 'Большинство CTV SDK не поддерживают SIMID (Fire TV, Roku, LG, Samsung)');
-  if (nonLinears.length > 0) add('CTV / OTT', 'warn', 'NonLinear-объявление', 'NonLinear не поддерживается CTV-плеерами — будет проигнорировано');
   if (lowBitrateOnly) add('CTV / OTT', 'warn', 'Низкий битрейт для CTV', 'Все файлы <800 kbps — на большом экране будет видно артефакты (рек. ≥1500)');
   if (webmOnly) add('CTV / OTT', 'error', 'Только WebM — не воспроизведётся', 'WebM не поддерживается на большинстве CTV-устройств');
 
-  // ── Mobile / In-App ──
+  // ── Mobile / In-App (дубли «только WebM / только VPAID» убраны — те же кейсы в CTV; HTTP — отдельно) ──
   if (hasHttp) add('Mobile', 'error', 'HTTP трекеры/медиа', 'Мобильные приложения (iOS ATS, Android Network Policy) требуют HTTPS');
-  if (webmOnly) add('Mobile', 'error', 'Только WebM', 'WebM не поддерживается на iOS Safari/WKWebView — нужен MP4-фоллбэк');
-  if (vpaidFiles.length > 0 && videoFiles.length === 0) add('Mobile', 'error', 'Только VPAID', 'VPAID не поддерживается в мобильных SDK (IMA, MAX, AppLovin)');
 
   return items;
 }
@@ -1875,8 +2012,14 @@ function processResults(data) {
   renderInfraPanel(data);
   renderRootCause(data);
   renderCompliance(data);
-  initPlayer(data);
+  /** Сначала показываем результаты — иначе плеер/iframe VPAID в display:none могут не получить размеры и не стартовать; повторный анализ тоже. */
   chkResults.classList.remove('hidden');
+  /** Два rAF: reflow после снятия .hidden, затем init — иначе video/iframe иногда остаются с нулевой геометрией. */
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      initPlayer(data);
+    });
+  });
 }
 
 const BTN_PARSE_INNER = `<svg width="9" height="9" viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" fill="currentColor"/></svg> Анализировать`;
@@ -1920,6 +2063,10 @@ async function doChkParse() {
     }
 
     // Quick peek — is it a Wrapper? If so resolve chain
+    if (/<\s*w:wordDocument\b/i.test(xmlStr) && /schemas\.microsoft\.com\/office\/word\/2003\/wordml/i.test(xmlStr)) {
+      loadAcc.push({ level: 'info', msg: 'Распознан Word 2003 XML: VAST собран из текста в элементах w:t.' });
+    }
+
     const quick = parseVAST(xmlStr);
     if (quick.error) { showChkError(quick.error, loadAcc); return; }
 
@@ -1935,6 +2082,7 @@ async function doChkParse() {
 
     if (data.error) { showChkError(data.error, loadAcc); return; }
     data.loadIssues = loadAcc;
+    await enrichDataWithVpaidBundledLinearVideo(data);
     processResults(data);
     if (parsedFromUrl) showFetchedXmlInEditor(xmlStr, data);
 
@@ -1954,28 +2102,115 @@ function buildVpaidSrcdoc(scriptUrl, width, height, creativeData) {
   const w = Number(width) > 0 ? Number(width) : 640;
   const h = Number(height) > 0 ? Number(height) : 360;
   const cd = String(creativeData || '');
-  const cfg = JSON.stringify({ scriptUrl, w, h, cd }).replace(/</g, '\\u003c');
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:100%;height:100%;background:#0a0a0f}</style></head><body><div id="s"></div><script>
+  /** Нативные controls у videoSlot — пауза/громкость, если креатив не рисует свой UI (часть поставщиков полагается на это). */
+  const cfg = JSON.stringify({ scriptUrl, w, h, cd, videoControls: true }).replace(/</g, '\\u003c');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:100%;min-height:100%;height:100%;background:#0a0a0f;box-sizing:border-box}body{display:flex;align-items:center;justify-content:center}#s{flex-shrink:0;position:relative;overflow:hidden}
+/* Chromium/WebKit: нативная панель video[controls] при play обычно скрывается до паузы/конца — мешает проверке VPAID. Держим панель видимой (DOM креатива в slot не трогаем). */
+video::-webkit-media-controls-panel{opacity:1!important;visibility:visible!important;transition:none!important}
+video::-webkit-media-controls-enclosure{overflow:visible!important}
+video::-webkit-media-controls-timeline-container{opacity:1!important}
+video::-webkit-media-controls-current-time-display,video::-webkit-media-controls-time-remaining-display{opacity:1!important}
+</style></head><body><div id="s"></div><script>
 (function(){
 var C=${cfg};
 function send(m,x){try{parent.postMessage({type:'zi-vpaid',msg:m,extra:x!=null?String(x):''},'*');}catch(e){}}
-var slot=document.getElementById('s');
-slot.style.cssText='width:'+C.w+'px;height:'+C.h+'px;margin:0 auto;position:relative';
+var outer=document.getElementById('s');
+outer.style.cssText='width:'+C.w+'px;height:'+C.h+'px;position:relative;overflow:hidden';
 var v=document.createElement('video');
-v.setAttribute('playsinline','');v.style.cssText='width:100%;height:100%;background:#000';
-slot.appendChild(v);
+v.setAttribute('playsinline','');
+v.style.cssText='position:absolute;left:0;top:0;width:100%;height:100%;background:#000;z-index:0';
+if(C.videoControls){try{v.setAttribute('controls','');}catch(e){}}
+if(C.videoControls){
+  v.addEventListener('play',function(){try{v.controls=true;}catch(_){}});
+  v.addEventListener('playing',function(){try{v.controls=true;}catch(_){}});
+}
+var uiRoot=document.createElement('div');
+uiRoot.setAttribute('data-vpaid-ui-root','1');
+/** pointer-events:none — иначе пустая подложка перехватывает клики: не видны нативные controls video и часть UI сторонних VPAID. Дочерние узлы креатива с pointer-events:auto по-прежнему кликабельны. */
+uiRoot.style.cssText='position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden';
+outer.appendChild(v);
+outer.appendChild(uiRoot);
 var firstNativePlay=true,nativePaused=false;
 v.addEventListener('pause',function(){send('native-pause');nativePaused=true;});
 v.addEventListener('play',function(){
   if(firstNativePlay){firstNativePlay=false;return;}
   if(nativePaused){send('native-resume');nativePaused=false;}
 });
-slot.addEventListener('click',function(e){
-  try{if(v.shadowRoot&&e.target&&v.shadowRoot.contains(e.target))return;}catch(_){}
-  var t=e.target;if(t&&t.tagName){var U=t.tagName.toUpperCase();if(U==='BUTTON'||U==='INPUT'||U==='SELECT'||U==='TEXTAREA')return;}
-  send('native-click');
+function isInteractiveNode(t){
+  if(!t)return false;
+  if(t.nodeType===3)t=t.parentElement;
+  if(!t||t.nodeType!==1)return false;
+  var U=t.tagName?t.tagName.toUpperCase():'';
+  if(U==='INPUT'||U==='TEXTAREA'||U==='SELECT'||U==='BUTTON'||U==='OPTION'||U==='LABEL')return true;
+  if(U==='A'&&(t.getAttribute('href')||t.href))return true;
+  try{if(t.isContentEditable)return true;}catch(_){}
+  var r=t.getAttribute&&t.getAttribute('role');
+  if(r){r=r.toLowerCase();if(/^(textbox|searchbox|combobox|listbox|spinbutton|slider|menuitem)$/.test(r))return true;}
+  return false;
+}
+function pathTouchesInteractive(ev){
+  var path=typeof ev.composedPath==='function'?ev.composedPath():[];
+  if(!path||!path.length){if(ev.target)path=[ev.target];else return false;}
+  for(var i=0;i<path.length;i++){
+    var n=path[i];
+    if(n===window||n===document||!n)continue;
+    if(n===outer)break;
+    if(isInteractiveNode(n))return true;
+  }
+  return false;
+}
+outer.addEventListener('click',function(e){
+  if(e.button!==0)return;
+  if(uiRoot.contains(e.target))return;
+  if(pathTouchesInteractive(e))return;
+  var path=typeof e.composedPath==='function'?e.composedPath():[e.target];
+  var vi=-1;
+  for(var i=0;i<path.length;i++){if(path[i]===v){vi=i;break;}}
+  if(vi!==0)return;
+  send('native-click',e.isTrusted?'1':'0');
+},true);
+var lastMuted=v.muted||v.volume===0;
+v.addEventListener('volumechange',function(){
+  var m=v.muted||v.volume===0;
+  if(m===lastMuted)return;
+  lastMuted=m;
+  send(m?'native-mute':'native-unmute');
 });
-var env={slot:slot,videoSlot:v,videoSlotCanAutoPlay:function(){return true;}};
+v.addEventListener('loadeddata',function(){
+  lastMuted=v.muted||v.volume===0;
+});
+var lastRate=v.playbackRate;
+v.addEventListener('ratechange',function(){
+  if(v.playbackRate===lastRate)return;
+  lastRate=v.playbackRate;
+  send('native-rate',String(v.playbackRate));
+});
+var fsInsideSlot=false;
+var ziVpaidInstance=null;
+function applyVpaidResizeAfterLayout(){
+  var vp=ziVpaidInstance;
+  if(!vp||typeof vp.resizeAd!=='function')return;
+  var full=document.fullscreenElement;
+  var w=C.w,h=C.h,view='normal';
+  try{
+    if(full&&outer.contains(full)){
+      view='fullscreen';
+      w=full.clientWidth||full.offsetWidth||window.innerWidth||C.w;
+      h=full.clientHeight||full.offsetHeight||window.innerHeight||C.h;
+    }
+  }catch(_){}
+  requestAnimationFrame(function(){
+    try{vp.resizeAd(w,h,view);}catch(_){}
+  });
+}
+document.addEventListener('fullscreenchange',function(){
+  var el=document.fullscreenElement;
+  var inFs=!!(el&&outer.contains(el));
+  if(inFs&&!fsInsideSlot){fsInsideSlot=true;send('native-fs-enter');}
+  if(!inFs&&fsInsideSlot){fsInsideSlot=false;send('native-fs-exit');}
+  setTimeout(applyVpaidResizeAfterLayout,inFs?0:60);
+});
+var env={slot:uiRoot,videoSlot:v,videoSlotCanAutoPlay:function(){return true;}};
 var playbackStarted=false;
 /** Яндекс vpaid_loader подгружает VpaidPlayer асинхронно — startAd до готовности даёт WITHOUT_VPAID; повторяем с интервалом. */
 function safeStartAd(vp, attempt){
@@ -1986,6 +2221,7 @@ function safeStartAd(vp, attempt){
     vp.startAd();
     playbackStarted=true;
     send('sandbox-started');
+    setTimeout(applyVpaidResizeAfterLayout,0);
   }catch(e){
     var msg=e&&e.message!=null?String(e.message):String(e);
     var retryable=/WITHOUT_VPAID|VPAID_PLAYER_LOADER|ACTION_METHOD_CALLED|DEFAULT_ERROR_MESSAGE|not\s*ready|VAS\s+Error/i.test(msg);
@@ -1998,6 +2234,7 @@ function safeStartAd(vp, attempt){
 }
 function boot(vp){
   if(!vp||typeof vp.initAd!=='function'){send('vpaid-invalid');return;}
+  ziVpaidInstance=vp;
   var hv;try{hv=vp.handshakeVersion('2.0');}catch(e){send('handshake-error',e.message);hv='2.0';}
   send('handshake',String(hv));
   try{vp.subscribe(function(){
@@ -2006,7 +2243,7 @@ function boot(vp){
   },'AdLoaded');}catch(e){}
   var evs=['AdStarted','AdStopped','AdError','AdSkipped','AdImpression','AdVideoStart','AdVideoFirstQuartile','AdVideoMidpoint','AdVideoThirdQuartile','AdVideoComplete','AdPaused','AdPlaying','AdVolumeChange','AdClickThru','AdInteraction'];
   evs.forEach(function(ev){try{vp.subscribe(function(){send(ev);},ev);}catch(_){}});
-  try{vp.initAd(C.w,C.h,'normal',0,{AdParameters:C.cd||''},env);send('initAd-called');}catch(e){send('initAd-error',e.message);return;}
+  try{vp.initAd(C.w,C.h,'normal',0,{AdParameters:C.cd||''},env);send('initAd-called');setTimeout(applyVpaidResizeAfterLayout,0);}catch(e){send('initAd-error',e.message);return;}
   setTimeout(function(){if(!playbackStarted){send('AdLoaded-timeout');safeStartAd(vp,0);}},12000);
 }
 /** IAB: getVPAID; Яндекс vpaid_loader.js: window.getVPAIDAd (см. бандл VpaidLoader). */
@@ -2065,11 +2302,76 @@ let vpaidBlobUrlToRevoke = null;
  * }}
  */
 let vpaidLastLoadContext = null;
+/** Прореживание AdInteraction в ленте (часть VPAID шлёт на каждый ввод в поле). */
+let vpaidLastAdInteractionFeedAt = 0;
 
 function revokeVpaidBlobIfAny() {
   if (vpaidBlobUrlToRevoke) {
     try { URL.revokeObjectURL(vpaidBlobUrlToRevoke); } catch { /* ignore */ }
     vpaidBlobUrlToRevoke = null;
+  }
+}
+
+/**
+ * В &lt;MediaFile&gt; иногда пишут aspect как width="16" height="9" вместо пикселей — слот 16×9 px ломает VPAID (крошечная картинка).
+ * @returns {{ w: number, h: number }}
+ */
+function normalizeVpaidSlotDimensions(/** @type {unknown} */ widthAttr, /** @type {unknown} */ heightAttr) {
+  const w = parseInt(String(widthAttr ?? '').trim(), 10);
+  const h = parseInt(String(heightAttr ?? '').trim(), 10);
+  const MIN_W = 200;
+  const MIN_H = 120;
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < MIN_W || h < MIN_H) return { w: 640, h: 360 };
+  return { w, h };
+}
+
+/**
+ * Часть VPAID-бандлов (GetShop и др.) держит URL прогрессивного видео внутри JS, без &lt;MediaFile&gt; video/mp4.
+ * Паттерн из открытых креативов: <code>video:"https://…mp4"</code> в минифицированном конфиге.
+ */
+async function enrichDataWithVpaidBundledLinearVideo(/** @type {any} */ data) {
+  if (!data || !Array.isArray(data.mediaFiles)) return;
+  const { vpaidFiles, videoFiles } = getMediaBuckets(data.mediaFiles);
+  if (videoFiles.length || !vpaidFiles.length) return;
+  const f = vpaidFiles[0];
+  if (!f?.url) return;
+  const scriptUrl = resolveMediaFileUrl(f.url, lastChkVastPageUrl);
+  let text = '';
+  try {
+    const r = await fetch(scriptUrl, { mode: 'cors', credentials: 'omit' });
+    if (r.ok) text = await r.text();
+  } catch { /* часто CORS */ }
+  if (!text.trim()) {
+    try {
+      const r2 = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(scriptUrl)}`);
+      const j = await r2.json();
+      text = j && typeof j.contents === 'string' ? j.contents : '';
+    } catch { /* ignore */ }
+  }
+  if (!text.trim()) return;
+  const re = /\bvideo\s*:\s*["'](https?:\/\/[^"']+)["']/gi;
+  let m;
+  const seen = new Set();
+  while ((m = re.exec(text)) !== null) {
+    const u = String(m[1] || '').trim();
+    if (!u || seen.has(u)) continue;
+    if (!/\.(mp4|webm|m3u8)(\?|#|$)/i.test(u)) continue;
+    seen.add(u);
+    const low = u.toLowerCase();
+    const type = low.includes('.m3u8') ? 'application/vnd.apple.mpegurl'
+      : low.includes('.webm') ? 'video/webm' : 'video/mp4';
+    data.mediaFiles.push({
+      url: u,
+      type,
+      delivery: 'progressive',
+      width: '',
+      height: '',
+      bitrate: '',
+      api: '',
+      kind: 'media',
+      source: 'vpaidScript',
+    });
+    break;
   }
 }
 
@@ -2110,8 +2412,31 @@ async function fetchJavascriptViaProxyAsBlobUrl(scriptUrl) {
   return URL.createObjectURL(blob);
 }
 
-/** @type {Array<{ mode: 'vpaid'|'html'|'vpaid-js', file: object, label: string }>} */
+/** @type {Array<{ mode: 'vpaid-sandbox'|'vpaid-yandex'|'html'|'vpaid-js', file: object, label: string }>} */
 let vpaidInteractiveList = [];
+
+/**
+ * MP4 из vpaid.js уже идёт в верхний плеер — автоматический startAd в iframe дублирует сценарий
+ * (GetShop Vitrina и др.: сразу «стороний» UI и автоплей). Интерактив подгружаем только по кнопке.
+ */
+function shouldDeferVpaidInteractiveLoad(/** @type {any} */ data) {
+  if (!data || !Array.isArray(data.mediaFiles)) return false;
+  const { vpaidFiles, videoFiles } = getMediaBuckets(data.mediaFiles);
+  if (!vpaidFiles.length) return false;
+  return videoFiles.some(f => f.source === 'vpaidScript');
+}
+
+/**
+ * Yandex Ad SDK (AdLoader) имеет смысл только для VAST/креативов экосистемы Яндекса.
+ * Остальной VPAID (MediaVitrina, GetShop и т.д.) — IAB-песочница в iframe.
+ */
+function shouldUseYandexAdSdkForVpaid(/** @type {{ url?: string }} */ file, /** @type {any} */ data) {
+  const u = (file.url || '').toLowerCase();
+  if (/yandex\.ru\/ads|yastatic\.net\/.*\/ads|\/ads\/system\/adsdk|adfox\.ru/i.test(u)) return true;
+  const sys = String(data?.adSystem || '').toLowerCase();
+  if (/yandex|adfox|яндекс/.test(sys)) return true;
+  return false;
+}
 
 function clearVpaidSandbox() {
   destroyYandexAdPlayback();
@@ -2128,12 +2453,20 @@ function clearVpaidSandbox() {
   vpaidSandboxWrap.setAttribute('aria-hidden', 'true');
 }
 
-function setupVpaidPanel(data) {
+function setupVpaidPanel(data, opts = {}) {
+  const forceLoadInteractive = !!(opts && opts.forceLoadInteractive);
   vpaidInteractiveList = [];
   const { vpaidFiles, interactives } = getMediaBuckets(data.mediaFiles);
   vpaidFiles.forEach((f) => {
     if (!f.url) return;
-    vpaidInteractiveList.push({ mode: 'vpaid', file: f, label: `VPAID ${f.width || '?'}×${f.height || '?'}` });
+    const useYa = shouldUseYandexAdSdkForVpaid(f, data);
+    vpaidInteractiveList.push({
+      mode: useYa ? 'vpaid-yandex' : 'vpaid-sandbox',
+      file: f,
+      label: useYa
+        ? `VPAID · Yandex Ad SDK ${f.width || '?'}×${f.height || '?'}`
+        : `VPAID · песочница ${f.width || '?'}×${f.height || '?'}`,
+    });
   });
   interactives.forEach((f) => {
     if (!f.url) return;
@@ -2148,19 +2481,39 @@ function setupVpaidPanel(data) {
   if (!vpaidInteractiveList.length) {
     vpaidPanel.classList.add('hidden');
     clearVpaidSandbox();
+    if (vpaidDeferredLoadRow) vpaidDeferredLoadRow.classList.add('hidden');
     return;
   }
 
   vpaidPanel.classList.remove('hidden');
-  vpaidFileSelect.innerHTML = vpaidInteractiveList.map((o, i) => {
-    const u = o.file.url || '';
-    const short = u.length > 72 ? `${u.slice(0, 72)}…` : u;
-    return `<option value="${i}">${escChk(o.label)} — ${escChk(short)}</option>`;
-  }).join('');
   clearVpaidSandbox();
-  vpaidStatus.textContent = lastChkVastPageUrl
-    ? '«Загрузить» — весь VAST по URL; SIMID/HTML — iframe.'
-    : '«Загрузить» — VAST из XML; SIMID/HTML — iframe.';
+
+  const deferInteractive = !forceLoadInteractive && shouldDeferVpaidInteractiveLoad(data);
+  if (deferInteractive) {
+    vpaidStatus.textContent = 'Линейное видео — в плеере выше (по умолчанию на паузе). Полный VPAID с баннером и кнопкой «Продолжить» не загружается, пока вы не нажмёте кнопку — воспроизведение сверху остаётся отдельным.';
+    if (vpaidDeferredLoadRow) vpaidDeferredLoadRow.classList.remove('hidden');
+    return;
+  }
+  if (vpaidDeferredLoadRow) vpaidDeferredLoadRow.classList.add('hidden');
+
+  vpaidStatus.textContent = 'Автозагрузка интерактива…';
+  /** Небольшая задержка после clearVpaidSandbox: iframe успевает сброситься при повторном «Анализировать». */
+  setTimeout(() => {
+    void loadVpaidIntoSandbox().catch((e) => {
+      const s = e instanceof Error ? e.message : String(e);
+      vpaidStatus.textContent = `Ошибка загрузки VPAID: ${s}`;
+      console.error(e);
+    });
+  }, 48);
+}
+
+/** Повторная загрузка iframe / Yandex SDK с тем же разобранным VAST (без нового «Анализировать»). */
+function reloadVpaidInteractive() {
+  if (!vastData) {
+    vpaidStatus.textContent = 'Нет данных VAST — нажмите «Анализировать».';
+    return;
+  }
+  setupVpaidPanel(vastData, { forceLoadInteractive: true });
 }
 
 async function retryVpaidLoadViaProxy() {
@@ -2174,6 +2527,7 @@ async function retryVpaidLoadViaProxy() {
     vpaidBlobUrlToRevoke = blob;
     vpaidLastLoadContext = { ...ctx, usedBlob: true };
     try { vpaidSandboxFrame.src = 'about:blank'; } catch { /* ignore */ }
+    await new Promise((r) => setTimeout(r, 48));
     vpaidSandboxFrame.srcdoc = buildVpaidSrcdoc(blob, w, h, cd);
     vpaidStatus.textContent = 'Загрузка VPAID (JS) в песочницу…';
   } catch (e) {
@@ -2183,19 +2537,23 @@ async function retryVpaidLoadViaProxy() {
 }
 
 async function loadVpaidIntoSandbox() {
-  const idx = parseInt(vpaidFileSelect.value, 10);
-  const item = vpaidInteractiveList[idx];
+  const item = vpaidInteractiveList[0];
   if (!item) return;
-  if (item.mode !== 'vpaid' && !item.file.url) return;
-
-  if (item.mode === 'vpaid') {
-    await loadYandexVastAdPlayback();
+  if (item.mode === 'vpaid-yandex') {
+    try {
+      await loadYandexVastAdPlayback();
+    } catch (e) {
+      const s = e instanceof Error ? e.message : String(e);
+      vpaidStatus.textContent = `Yandex Ad SDK: ${s}`;
+      console.error(e);
+    }
     return;
   }
 
+  if (!item.file?.url) return;
+
   const f = item.file;
-  const w = parseInt(String(f.width || ''), 10) || 640;
-  const h = parseInt(String(f.height || ''), 10) || 360;
+  const { w, h } = normalizeVpaidSlotDimensions(f.width, f.height);
   const cd = vastData && vastData.adParameters ? vastData.adParameters : '';
 
   adfoxYandexWrap.classList.add('hidden');
@@ -2209,6 +2567,8 @@ async function loadVpaidIntoSandbox() {
   if (item.mode === 'html') {
     try { vpaidSandboxFrame.removeAttribute('srcdoc'); } catch { /* ignore */ }
     revokeVpaidBlobIfAny();
+    try { vpaidSandboxFrame.src = 'about:blank'; } catch { /* ignore */ }
+    await new Promise((r) => setTimeout(r, 48));
     const htmlUrl = resolveMediaFileUrl(f.url, lastChkVastPageUrl);
     if (isHttpsPageLoadingHttpResource(htmlUrl)) {
       vpaidStatus.textContent = 'HTTP-страница в iframe на HTTPS заблокирована браузером. Нужен HTTPS-URL ресурса или вставка XML в режиме «Только XML».';
@@ -2221,6 +2581,8 @@ async function loadVpaidIntoSandbox() {
 
   try { vpaidSandboxFrame.src = 'about:blank'; } catch { /* ignore */ }
   revokeVpaidBlobIfAny();
+  /** Дать iframe сброситься (перезапуск при повторном анализе). */
+  await new Promise((r) => setTimeout(r, 48));
 
   const resolvedScriptUrl = resolveMediaFileUrl(f.url, lastChkVastPageUrl);
   vpaidStatus.textContent = 'Подготовка VPAID…';
@@ -2259,7 +2621,7 @@ function onVpaidSandboxMessage(/** @type {MessageEvent} */ e) {
   const extra = d.extra ? String(d.extra) : '';
 
   if (msg === 'sandbox-started') {
-    vpaidStatus.textContent = 'VPAID: startAd выполнен — события в «Живых событиях», креатив в iframe.';
+    vpaidStatus.textContent = 'VPAID: startAd выполнен — кнопки креатива и видео работают; не ставьте ролик на паузу сразу (часть сценариев GetShop и др. ждёт воспроизведения).';
   } else if (msg === 'initAd-called') {
     vpaidStatus.textContent = 'initAd вызван; ожидание AdLoaded (или таймаут 8 с → fallback startAd).';
   } else if (msg === 'script-load-error') {
@@ -2279,17 +2641,44 @@ function onVpaidSandboxMessage(/** @type {MessageEvent} */ e) {
     vpaidStatus.textContent = 'AdLoaded не пришёл за 8 с — вызван startAd в режиме совместимости.';
   } else if (msg === 'handshake' || msg === 'handshake-error') {
     vpaidStatus.textContent = msg + (extra ? `: ${extra}` : '');
+  } else if (
+    msg === 'native-pause' || msg === 'native-resume' || msg === 'native-click'
+    || msg === 'native-mute' || msg === 'native-unmute' || msg === 'native-rate'
+    || msg === 'native-fs-enter' || msg === 'native-fs-exit'
+  ) {
+    /* только лента событий; не затираем статус строкой «native-pause» */
   } else {
     vpaidStatus.textContent = msg + (extra ? ` — ${extra}` : '');
   }
 
-  /** Нативные pause/play/click по video — те же ключи, что в XML (pause, resume, clickThrough) */
+  /** Нативные pause/play/click/mute/fs/rate по video в песочнице — URL из VAST */
+  if (vastData && msg === 'native-mute') {
+    addFeedEntry('mute', 'mute', vastData.eventMap.mute || []);
+    return;
+  }
+  if (vastData && msg === 'native-unmute') {
+    addFeedEntry('unmute', 'unmute', vastData.eventMap.unmute || []);
+    return;
+  }
+  if (vastData && msg === 'native-fs-enter') {
+    addFeedEntry('fullscreen', 'fullscreen', vastData.eventMap.fullscreen || []);
+    return;
+  }
+  if (vastData && msg === 'native-fs-exit') {
+    addFeedEntry('exitFullscreen', 'exitFullscreen', vastData.eventMap.exitFullscreen || []);
+    return;
+  }
+  if (vastData && msg === 'native-rate') {
+    addFeedEntry('playbackRate', `playbackRate ×${extra}`, urlsFromEventMapForKey(vastData.eventMap, 'playbackRate'));
+    return;
+  }
   if (vastData && (msg === 'native-pause' || msg === 'native-resume' || msg === 'native-click')) {
     if (msg === 'native-pause') {
       addFeedEntry('pause', 'pause', vastData.eventMap.pause || []);
     } else if (msg === 'native-resume') {
       addFeedEntry('resume', 'resume', vastData.eventMap.resume || []);
-    } else {
+    } else if (extra === '1') {
+      /** extra: доверенный клик из песочницы; «0» — синтетический (креатив) — не дублируем clickThrough с AdInteraction */
       const urls = vastClickUrlsForFeed(vastData);
       addFeedEntry('clickThrough', 'clickThrough', urls.length ? urls : (vastData.eventMap.clickThrough || []));
     }
@@ -2311,6 +2700,12 @@ function onVpaidSandboxMessage(/** @type {MessageEvent} */ e) {
     || msg === 'handshake-timeout' || (msg.endsWith('-error') && msg !== 'handshake-error');
   if (!toFeed || !vastData) return;
 
+  if (msg === 'AdInteraction') {
+    const now = Date.now();
+    if (now - vpaidLastAdInteractionFeedAt < 320) return;
+    vpaidLastAdInteractionFeedAt = now;
+  }
+
   const label = extra ? `${msg}: ${extra}` : msg;
   const useDiagUrls = sandboxDiagMessages.has(msg) || msg === 'handshake-timeout'
     || (msg.endsWith('-error') && !sandboxVpaidEvents.has(msg));
@@ -2323,7 +2718,11 @@ function onVpaidSandboxMessage(/** @type {MessageEvent} */ e) {
       urls = vastEventMapUrls(vastData.eventMap, msg);
     }
   }
-  addFeedEntry(msg, label, urls);
+  const feedUrls = useDiagUrls ? null : urls;
+  const feedOpts = !useDiagUrls && Array.isArray(urls) && urls.length === 0
+    ? { feedHint: 'vpaid-js' }
+    : undefined;
+  addFeedEntry(msg, label, feedUrls, feedOpts);
 }
 
 window.addEventListener('message', onVpaidSandboxMessage);
@@ -2352,6 +2751,45 @@ const playerSourceLabel = chk$('player-source-label');
 const playerFormatBadge = chk$('player-format-badge');
 const ctrlSeekBack   = chk$('ctrl-seek-back');
 const ctrlSeekFwd    = chk$('ctrl-seek-fwd');
+const ctrlCaptions   = chk$('ctrl-captions');
+const ctrlPlaybackRate = /** @type {HTMLSelectElement|null} */ (document.getElementById('ctrl-playback-rate'));
+
+const CHK_VPAID_NOTE_DISMISS_KEY = 'zi-chk-vpaid-note-dismissed';
+
+function getCaptionLikeTracks() {
+  if (!video.textTracks || !video.textTracks.length) return [];
+  return Array.from(video.textTracks).filter(
+    (t) => t.kind === 'subtitles' || t.kind === 'captions',
+  );
+}
+
+function updateCaptionsBtnState() {
+  if (!ctrlCaptions) return;
+  const tracks = getCaptionLikeTracks();
+  const has = tracks.length > 0;
+  ctrlCaptions.disabled = !has;
+  const showing = has && tracks.some((t) => t.mode === 'showing');
+  ctrlCaptions.setAttribute('aria-pressed', showing ? 'true' : 'false');
+  ctrlCaptions.title = has
+    ? (showing ? 'Скрыть субтитры' : 'Показать субтитры')
+    : 'В ролике нет дорожек субтитров';
+}
+
+function toggleCaptions() {
+  const tracks = getCaptionLikeTracks();
+  if (!tracks.length) return;
+  const anyShowing = tracks.some((t) => t.mode === 'showing');
+  if (anyShowing) {
+    tracks.forEach((t) => { t.mode = 'hidden'; });
+  } else {
+    tracks.forEach((t) => { t.mode = 'hidden'; });
+    tracks[0].mode = 'showing';
+  }
+  updateCaptionsBtnState();
+}
+
+/** Основной плеер: полноэкранный режим (для трека exitFullscreen при выходе). */
+let chkPlayerWasFullscreen = false;
 
 /** @type {ReturnType<typeof setTimeout>|undefined} */
 let feedLiveDotTimer;
@@ -2375,6 +2813,8 @@ const EVENT_COLORS = {
   mute:          '#9b7ee0',
   unmute:        '#9b7ee0',
   fullscreen:    '#9b7ee0',
+  exitFullscreen:'#9b7ee0',
+  playbackRate:  '#00c4bc',
   skip:          '#ff3d3a',
   clickThrough:  '#9b7ee0',
   clickTracking: '#9b7ee0',
@@ -2404,8 +2844,14 @@ function fmtTime(s) {
 
 function applyVideoSource(file) {
   const c = classifyLinearMediaFile(file);
+  try { video.autoplay = false; } catch { /* ignore */ }
   video.src = file.url || '';
   video.load();
+  try { video.pause(); } catch { /* ignore */ }
+  try {
+    const r = ctrlPlaybackRate ? parseFloat(ctrlPlaybackRate.value) : 1;
+    video.playbackRate = isFinite(r) && r > 0 ? r : 1;
+  } catch { /* ignore */ }
   playerFormatBadge.textContent = c.formatLabel;
   playerFormatBadge.dataset.fmt = c.formatKey;
   let hint = file.url || '';
@@ -2431,8 +2877,11 @@ function setPlayIcon(playing) {
     : '<svg id="ctrl-play-icon" width="14" height="14" viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" fill="currentColor"/></svg>';
 }
 
-/** @param {string|null} urls список URL трекеров из VAST; null — внешний плеер, без строки URL */
-function addFeedEntry(key, label, urls) {
+/**
+ * @param {string|null} urls список URL трекеров из VAST; null — внешний плеер / диагностика, без строки URL
+ * @param {{ feedHint?: 'vpaid-js' }} [opts] feedHint: событие из iframe VPAID, в XML нет URL
+ */
+function addFeedEntry(key, label, urls, opts) {
   const empty = document.getElementById('player-feed-empty');
   if (empty) empty.remove();
 
@@ -2451,8 +2900,10 @@ function addFeedEntry(key, label, urls) {
     urlStr = '<span class="feed-no-urls">—</span>';
   } else if (urls.length) {
     urlStr = `<span class="feed-url-text" data-url="${escChk(urls[0])}">${escChk(urls[0].slice(0, 55))}${urls[0].length > 55 ? '…' : ''}</span>${urls.length > 1 ? ` <em>+${urls.length - 1}</em>` : ''}`;
+  } else if (opts && opts.feedHint === 'vpaid-js') {
+    urlStr = '<span class="feed-vpaid-js-hint" title="В VAST нет URL для этого события — запрос шлёт vpaid.js. Смотрите Network (F12).">пиксели из VPAID (не в XML)</span>';
   } else {
-    urlStr = '<span style="color:var(--t4)">трекер не задан</span>';
+    urlStr = '<span class="feed-no-vast-url" style="color:var(--t4)" title="В VAST нет URL для этого события (нет &lt;Tracking&gt; в Linear и т.п.).">нет URL в VAST</span>';
   }
 
   const el = document.createElement('div');
@@ -2481,13 +2932,13 @@ function addFeedEntry(key, label, urls) {
 function fireOnce(key, label) {
   if (!vastData || firedOnce.has(key)) return;
   firedOnce.add(key);
-  addFeedEntry(key, label, vastData.eventMap[key] || []);
+  addFeedEntry(key, label, urlsFromEventMapForKey(vastData.eventMap, key));
 }
 
 // Fire repeatable event
 function fireRepeat(key, label) {
   if (!vastData) return;
-  addFeedEntry(key, label, vastData.eventMap[key] || []);
+  addFeedEntry(key, label, urlsFromEventMapForKey(vastData.eventMap, key));
 }
 
 /** Обновление полосы и времени; реже ~60 Hz, чтобы не перегружать layout/рендер. */
@@ -2547,9 +2998,22 @@ function initPlayer(data) {
   video.src = '';
   video.load();
 
+  const onlyVpaidHintEl = document.getElementById('player-only-vpaid-hint');
+  if (onlyVpaidHintEl) onlyVpaidHintEl.classList.add('hidden');
+  const legacyMirror = document.getElementById('player-vpaid-mirror-hint');
+  if (legacyMirror) legacyMirror.remove();
+  playerBigPlay.classList.remove('hidden');
+
+  if (vpaidInteractiveMounts) vpaidInteractiveMounts.classList.remove('hidden');
+  if (vpaidToggleMountsBtn) {
+    vpaidToggleMountsBtn.textContent = 'Скрыть блок';
+    vpaidToggleMountsBtn.setAttribute('aria-expanded', 'true');
+  }
+
   vastData       = data;
   firedOnce      = new Set();
   isMutedState   = false;
+  chkPlayerWasFullscreen = false;
 
   feedList.innerHTML = PLAYER_FEED_EMPTY_HTML;
 
@@ -2559,6 +3023,12 @@ function initPlayer(data) {
   playerBadge.className   = 'player-badge';
   playerTime.textContent  = '0:00 / 0:00';
   playerOverlay.classList.remove('hidden');
+  try {
+    if (ctrlPlaybackRate) {
+      ctrlPlaybackRate.value = '1';
+      video.playbackRate = 1;
+    }
+  } catch { /* ignore */ }
   vpaidNote.classList.add('hidden');
   feedLiveDot.classList.remove('active');
   setPlayIcon(false);
@@ -2575,21 +3045,66 @@ function initPlayer(data) {
 
   // Show VPAID/SIMID note but still play video if regular MediaFiles exist
   if (interactives.length > 0 || vpaidFiles.length > 0) {
-    vpaidNote.classList.remove('hidden');
+    let hideVpNote = false;
+    try {
+      hideVpNote = sessionStorage.getItem(CHK_VPAID_NOTE_DISMISS_KEY) === '1';
+    } catch { /* ignore */ }
     let noteLine = '';
     if (vpaidFiles.length) {
-      noteLine = videoFiles.length
-        ? `VPAID (${vpaidFiles.length}): не в этом плеере. Обычный ролик — ниже. Интерактив — под плеером.`
-        : `VPAID (${vpaidFiles.length}): не в этом плеере. Ролика MP4/WebM нет. Интерактив — под плеером.`;
+      const fromVpaidScript = videoFiles.some(f => f.source === 'vpaidScript');
+      const hasAp = videoFiles.some(f => f.source === 'adParameters' || f.source === 'vpaidScript');
+      if (videoFiles.length) {
+        if (fromVpaidScript) {
+          noteLine = 'Здесь только видео из VPAID (старт с паузы). Полный интерактив не подгружается сам — кнопка «Загрузить интерактив VPAID» в блоке ниже.';
+        } else if (hasAp) {
+          noteLine = `VPAID (${vpaidFiles.length}) — ниже. Ролик из AdParameters играет здесь.`;
+        } else {
+          noteLine = `VPAID (${vpaidFiles.length}) — ниже. Обычное видео — здесь, интерактив — в «VPAID / интерактив».`;
+        }
+      } else {
+        noteLine = `VPAID (${vpaidFiles.length}) — только ниже: MP4/WebM в теге нет.`;
+      }
     } else if (interactives.length) {
       noteLine = videoFiles.length
-        ? `SIMID (${interactives.length}): не в этом плеере. Обычный ролик — ниже. Интерактив — под плеером.`
-        : `SIMID (${interactives.length}): не в этом плеере. Ролика MP4/WebM нет. Интерактив — под плеером.`;
+        ? `SIMID (${interactives.length}) — ниже. Видео — здесь.`
+        : `SIMID (${interactives.length}) — только ниже: MP4/WebM в теге нет.`;
     }
-    vpaidNote.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 9v4m0 4h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
-      <span>${noteLine}</span>`;
+    if (hideVpNote) {
+      vpaidNote.classList.add('hidden');
+      vpaidNote.innerHTML = '';
+    } else {
+      vpaidNote.classList.remove('hidden');
+      const showScrollToVpaid = vpaidFiles.length > 0 && videoFiles.length > 0;
+      const scrollBtnHtml = showScrollToVpaid
+        ? '<button type="button" class="player-vpaid-note-scroll btn ghost sm">К блоку VPAID</button>'
+        : '';
+      vpaidNote.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 9v4m0 4h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+      <span class="player-vpaid-note-text">${noteLine}</span>
+      ${scrollBtnHtml}
+      <button type="button" class="player-vpaid-note-close" id="player-vpaid-note-close" aria-label="Скрыть подсказку" title="Скрыть">×</button>`;
+      const scrollToVpaidBtn = vpaidNote.querySelector('.player-vpaid-note-scroll');
+      if (scrollToVpaidBtn) {
+        scrollToVpaidBtn.addEventListener('click', () => {
+          try { vpaidPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { /* ignore */ }
+        });
+      }
+    }
     if (!videoFiles.length) {
+      playerBadge.textContent = 'ТОЛЬКО VPAID';
+      playerBadge.className = 'player-badge paused';
+      playerTime.textContent = '— / —';
+      playerBigPlay.classList.add('hidden');
+      let hintEl = document.getElementById('player-only-vpaid-hint');
+      if (!hintEl) {
+        hintEl = document.createElement('div');
+        hintEl.id = 'player-only-vpaid-hint';
+        hintEl.className = 'player-only-vpaid-hint hidden';
+        hintEl.setAttribute('role', 'status');
+        playerOverlay.appendChild(hintEl);
+      }
+      hintEl.textContent = 'В VAST нет линейного MP4/WebM — видео с баннером только в блоке «VPAID / интерактив» ниже.';
+      hintEl.classList.remove('hidden');
       setupVpaidPanel(data);
       return;
     }
@@ -2619,6 +3134,13 @@ function initPlayer(data) {
   } else {
     applyVideoSource(videoFiles[0]);
   }
+  try {
+    void video.pause();
+    playerOverlay.classList.remove('hidden');
+    setPlayIcon(false);
+    playerBadge.textContent = 'PAUSED';
+    playerBadge.className = 'player-badge paused';
+  } catch { /* ignore */ }
 }
 
 // ── Video events ───────────────────────────────────────────────────────────────
@@ -2675,16 +3197,20 @@ video.addEventListener('volumechange', () => {
   else          fireRepeat('unmute', 'Unmute');
 });
 
-/** В фоновой вкладке rAF почти не крутится — timeupdate подстрахует прогресс и квартили. */
+/**
+ * Квартили: дублируем с rAF (на паузе rAF может не вызывать maybeFireQuartiles каждый кадр).
+ * Фоновая вкладка: rAF почти не крутится — подстраховка прогресса и квартилей.
+ */
 video.addEventListener('timeupdate', () => {
   if (video.paused || video.ended) return;
-  if (document.visibilityState !== 'hidden') return;
-  const now = performance.now();
-  if (now - lastProgressUiAt >= PROGRESS_UI_MIN_MS) {
-    lastProgressUiAt = now;
-    updateProgressVisual();
-  }
   maybeFireQuartiles();
+  if (document.visibilityState === 'hidden') {
+    const now = performance.now();
+    if (now - lastProgressUiAt >= PROGRESS_UI_MIN_MS) {
+      lastProgressUiAt = now;
+      updateProgressVisual();
+    }
+  }
 });
 
 video.addEventListener('seeked', () => {
@@ -2694,7 +3220,25 @@ video.addEventListener('seeked', () => {
 video.addEventListener('loadedmetadata', () => {
   playerTime.textContent = `0:00 / ${fmtTime(video.duration)}`;
   playerFill.style.width = '0%';
+  /** Синхронизация с реальным mute/volume — иначе первый volumechange после смены ролика теряется. */
+  isMutedState = video.muted || video.volume === 0;
+  try {
+    ctrlVol.value = String(video.volume);
+    } catch { /* ignore */ }
+  /** Без автозапуска: ролик на паузе до действия пользователя (кнопка Play / большая кнопка на превью). */
+  if (video.src) {
+    playerBadge.textContent = 'PAUSED';
+    playerBadge.className = 'player-badge paused';
+  }
+  updateCaptionsBtnState();
 });
+
+try {
+  video.textTracks.addEventListener('addtrack', () => {
+    queueMicrotask(() => updateCaptionsBtnState());
+  });
+} catch { /* ignore */ }
+video.addEventListener('emptied', () => updateCaptionsBtnState());
 
 video.addEventListener('error', () => {
   if (!vastData) return;
@@ -2726,6 +3270,25 @@ playerBigPlay.addEventListener('click', () => {
 ctrlMute.addEventListener('click', () => {
   video.muted = !video.muted;
   if (!video.muted && video.volume === 0) video.volume = 0.5;
+});
+
+if (ctrlCaptions) {
+  ctrlCaptions.addEventListener('click', () => {
+    if (ctrlCaptions.disabled) return;
+    toggleCaptions();
+  });
+}
+
+playerVideoWrap.addEventListener('click', (e) => {
+  const btn = e.target.closest('#player-vpaid-note-close');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  vpaidNote.classList.add('hidden');
+  vpaidNote.innerHTML = '';
+  try {
+    sessionStorage.setItem(CHK_VPAID_NOTE_DISMISS_KEY, '1');
+  } catch { /* ignore */ }
 });
 
 ctrlVol.addEventListener('input', () => {
@@ -2765,6 +3328,29 @@ ctrlFullscreen.addEventListener('click', () => {
   else if (video.requestFullscreen) video.requestFullscreen().catch(() => {});
 });
 
+document.addEventListener('fullscreenchange', () => {
+  const el = document.fullscreenElement;
+  if (el && playerVideoWrap instanceof HTMLElement
+    && (el === playerVideoWrap || el === video || playerVideoWrap.contains(el))) {
+    chkPlayerWasFullscreen = true;
+    return;
+  }
+  if (!el && chkPlayerWasFullscreen && vastData) {
+    chkPlayerWasFullscreen = false;
+    fireRepeat('exitFullscreen', 'Exit fullscreen');
+  }
+});
+
+if (ctrlPlaybackRate) {
+  ctrlPlaybackRate.addEventListener('change', () => {
+    if (!vastData || !video.src) return;
+    const r = parseFloat(ctrlPlaybackRate.value);
+    if (!isFinite(r) || r <= 0) return;
+    video.playbackRate = r;
+    fireRepeat('playbackRate', `playbackRate ×${r}`);
+  });
+}
+
 ctrlSeekBack.addEventListener('click', () => playerSeekBy(-10));
 ctrlSeekFwd.addEventListener('click', () => playerSeekBy(10));
 
@@ -2779,6 +3365,13 @@ playerSourceSelect.addEventListener('change', () => {
   playerBadge.textContent = 'ОЖИДАНИЕ';
   playerBadge.className = 'player-badge';
   applyVideoSource(f);
+  try {
+    void video.pause();
+    playerOverlay.classList.remove('hidden');
+    setPlayIcon(false);
+    playerBadge.textContent = 'PAUSED';
+    playerBadge.className = 'player-badge paused';
+  } catch { /* ignore */ }
 });
 
 playerVideoWrap.addEventListener('keydown', e => {
@@ -2804,11 +3397,35 @@ feedClearBtn.addEventListener('click', () => {
   feedLiveDot.classList.remove('active');
 });
 
-vpaidLoadBtn.addEventListener('click', () => { void loadVpaidIntoSandbox(); });
-vpaidStopBtn.addEventListener('click', () => {
-  clearVpaidSandbox();
-  vpaidStatus.textContent = 'Песочница очищена.';
-});
+if (vpaidReloadBtn) {
+  vpaidReloadBtn.addEventListener('click', () => {
+    reloadVpaidInteractive();
+  });
+}
+
+if (vpaidToggleMountsBtn && vpaidInteractiveMounts) {
+  vpaidToggleMountsBtn.addEventListener('click', () => {
+    const collapsed = vpaidInteractiveMounts.classList.toggle('hidden');
+    vpaidToggleMountsBtn.textContent = collapsed ? 'Показать блок' : 'Скрыть блок';
+    vpaidToggleMountsBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  });
+}
+
+if (vpaidDeferredLoadBtn) {
+  vpaidDeferredLoadBtn.addEventListener('click', () => {
+    if (vpaidDeferredLoadRow) vpaidDeferredLoadRow.classList.add('hidden');
+    vpaidStatus.textContent = 'Загрузка интерактива…';
+    setTimeout(() => {
+      void loadVpaidIntoSandbox().catch((e) => {
+        const s = e instanceof Error ? e.message : String(e);
+        vpaidStatus.textContent = `Ошибка загрузки VPAID: ${s}`;
+        if (vastData && shouldDeferVpaidInteractiveLoad(vastData) && vpaidDeferredLoadRow) {
+          vpaidDeferredLoadRow.classList.remove('hidden');
+        }
+      });
+    }, 48);
+  });
+}
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 function escChk(s) {
@@ -2862,7 +3479,10 @@ chkXmlValidateBtn.addEventListener('click', () => {
     setXmlEditorStatus('Пустое поле', 'bad');
     return;
   }
-  const doc = new DOMParser().parseFromString(raw, 'text/xml');
+  const fromWord = tryExtractVastFromWordMl(raw);
+  const base = fromWord != null ? fromWord : raw;
+  const slice = extractVastXmlFromText(base) || base;
+  const doc = new DOMParser().parseFromString(slice.trim(), 'text/xml');
   if (doc.querySelector('parsererror')) setXmlEditorStatus('XML не well-formed (ошибка парсера)', 'bad');
   else if (!doc.querySelector('VAST')) setXmlEditorStatus('XML корректен, но нет корня <VAST>', 'warn');
   else setXmlEditorStatus('Well-formed XML, корень VAST найден', 'ok');
