@@ -69,6 +69,9 @@ const server = http.createServer((req, res) => {
     else pathname = '/' + sub;
   }
 
+  /** Таб: браузеры по умолчанию запрашивают /favicon.ico — отдаём тот же PNG, что и в шапке. */
+  if (pathname === '/favicon.ico') pathname = '/logo.png';
+
   const filePath = path.join(ROOT, path.normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, ''));
   const resolvedRoot = path.resolve(ROOT);
   const resolvedFile = path.resolve(filePath);
