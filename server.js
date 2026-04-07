@@ -55,12 +55,19 @@ const server = http.createServer((req, res) => {
 
   if (pathname === '/' || pathname === '') pathname = '/index.html';
 
-  /** SPA: те же пути, что на zi-tech.ru/digital/… */
-  const digitalSpa = new Set([
-    '/digital/zitag', '/digital/zitag/',
-    '/digital/zichecker', '/digital/zichecker/',
-  ]);
-  if (digitalSpa.has(pathname)) pathname = '/index.html';
+  /**
+   * Прод (zi-tech.ru): страница — /digital/zitag | /digital/zichecker, статика — /digital/style.css и т.д.
+   * Браузер с URL …/digital/zichecker (без / в конце) резолвит относительный style.css в …/digital/style.css.
+   * Локально маппим /digital/<файл> на файлы из корня репозитория.
+   */
+  if (pathname === '/digital' || pathname === '/digital/') {
+    pathname = '/index.html';
+  } else if (pathname.startsWith('/digital/')) {
+    const sub = pathname.slice('/digital/'.length);
+    const spaEntry = sub === 'zitag' || sub === 'zitag/' || sub === 'zichecker' || sub === 'zichecker/';
+    if (spaEntry) pathname = '/index.html';
+    else pathname = '/' + sub;
+  }
 
   const filePath = path.join(ROOT, path.normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, ''));
   const resolvedRoot = path.resolve(ROOT);
