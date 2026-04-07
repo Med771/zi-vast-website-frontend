@@ -282,6 +282,7 @@ const vpaidToggleMountsBtn = /** @type {HTMLButtonElement | null} */ (document.g
 const vpaidReloadBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('vpaid-reload-btn'));
 const vpaidDeferredLoadRow = document.getElementById('vpaid-deferred-load-row');
 const vpaidDeferredLoadBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('vpaid-deferred-load-btn'));
+const vpaidMountFullscreenBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('vpaid-mount-fullscreen-btn'));
 
 /** @type {Promise<void> | null} */
 let yandexAdsdkLoadPromise = null;
@@ -399,6 +400,7 @@ const DEFAULT_YANDEX_PLAYBACK_PARAMS = {
  * @see https://banners.adfox.ru/files/vast_checker.html
  */
 async function loadYandexVastAdPlayback() {
+  try {
   destroyYandexAdPlayback();
   try { vpaidSandboxFrame.src = 'about:blank'; } catch { /* ignore */ }
   try {
@@ -515,6 +517,9 @@ async function loadYandexVastAdPlayback() {
     const code = e && e.code != null ? String(e.code) : '';
     vpaidStatus.textContent = code ? `AdLoader: ${t} [${code}]` : `AdLoader: ${t}`;
     console.error(err);
+  }
+  } finally {
+    refreshVpaidMountFullscreenBtn();
   }
 }
 
@@ -2110,6 +2115,14 @@ video::-webkit-media-controls-panel{opacity:1!important;visibility:visible!impor
 video::-webkit-media-controls-enclosure{overflow:visible!important}
 video::-webkit-media-controls-timeline-container{opacity:1!important}
 video::-webkit-media-controls-current-time-display,video::-webkit-media-controls-time-remaining-display{opacity:1!important}
+/* Видео поверх креатива; pointer-events на video задаётся из JS (полоса снизу + focus) — иначе Chrome не показывает нативный toolbar при pointer-events:none на всём элементе. */
+#s>[data-vpaid-ui-root]{z-index:2}
+#s>video[data-zi-vpaid-slot-video],#s [data-vpaid-ui-root]>video[data-zi-vpaid-slot-video]{z-index:3!important}
+video[data-zi-vpaid-slot-video]::-webkit-media-controls-enclosure{pointer-events:auto!important}
+/* Родитель: fullscreen только на #vpaid-sandbox-wrap — заполняем вьюпорт, видео без letterbox */
+html.zi-mount-fs body{align-items:stretch!important;justify-content:stretch!important}
+html.zi-mount-fs #s{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;flex-shrink:1}
+html.zi-mount-fs video{object-fit:cover!important}
 </style></head><body><div id="s"></div><script>
 (function(){
 var C=${cfg};
@@ -2118,7 +2131,10 @@ var outer=document.getElementById('s');
 outer.style.cssText='width:'+C.w+'px;height:'+C.h+'px;position:relative;overflow:hidden';
 var v=document.createElement('video');
 v.setAttribute('playsinline','');
-v.style.cssText='position:absolute;left:0;top:0;width:100%;height:100%;background:#000;z-index:0';
+v.setAttribute('tabindex','0');
+v.setAttribute('data-zi-vpaid-slot-video','1');
+/** Видео — верхний слой; по умолчанию pointer-events:none (клики в основную область — в креатив). Внизу ~88px и при Tab-фокусе — auto, чтобы жить нативный toolbar. */
+v.style.cssText='position:absolute;left:0;top:0;width:100%;height:100%;background:#000;z-index:3;pointer-events:none';
 if(C.videoControls){try{v.setAttribute('controls','');}catch(e){}}
 if(C.videoControls){
   v.addEventListener('play',function(){try{v.controls=true;}catch(_){}});
@@ -2128,8 +2144,54 @@ var uiRoot=document.createElement('div');
 uiRoot.setAttribute('data-vpaid-ui-root','1');
 /** pointer-events:none — иначе пустая подложка перехватывает клики: не видны нативные controls video и часть UI сторонних VPAID. Дочерние узлы креатива с pointer-events:auto по-прежнему кликабельны. */
 uiRoot.style.cssText='position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden';
-outer.appendChild(v);
 outer.appendChild(uiRoot);
+outer.appendChild(v);
+/** Креативы с detached video (prepend в slot) оставляют Preact-root поверх video — поднимаем video в конец родителя. */
+function ziEnsureVideoOnTop(){
+  try{
+    var p=v.parentNode;
+    if(!p||p===document.body)return;
+    if(p.lastElementChild!==v)p.appendChild(v);
+  }catch(_){}
+}
+var ziVideoTopMo=new MutationObserver(function(){ziEnsureVideoOnTop();});
+try{
+  ziVideoTopMo.observe(uiRoot,{childList:true,subtree:true});
+  ziVideoTopMo.observe(outer,{childList:true,subtree:false});
+}catch(_){}
+[0,48,120,400,1200,2800].forEach(function(ms){setTimeout(ziEnsureVideoOnTop,ms);});
+var ZI_VIDEO_CTRL_BAND=88;
+var ziLastMouseClientY=null;
+function ziSyncVideoPointerEvents(){
+  try{
+    if(document.activeElement===v){v.style.pointerEvents='auto';return;}
+    if(ziLastMouseClientY==null){v.style.pointerEvents='none';return;}
+    var r=outer.getBoundingClientRect();
+    var y=ziLastMouseClientY-r.top;
+    var inBottom=y>=r.height-ZI_VIDEO_CTRL_BAND&&y<=r.height+24;
+    v.style.pointerEvents=inBottom?'auto':'none';
+  }catch(_){}
+}
+outer.addEventListener('mousemove',function(e){
+  ziLastMouseClientY=e.clientY;
+  ziSyncVideoPointerEvents();
+},false);
+outer.addEventListener('mouseleave',function(){
+  if(document.activeElement!==v){
+    ziLastMouseClientY=null;
+    v.style.pointerEvents='none';
+  }
+});
+outer.addEventListener('touchstart',function(e){
+  try{
+    var t=e.touches&&e.touches[0];
+    if(!t)return;
+    ziLastMouseClientY=t.clientY;
+    ziSyncVideoPointerEvents();
+  }catch(_){}
+},{passive:true});
+v.addEventListener('focus',function(){v.style.pointerEvents='auto';});
+v.addEventListener('blur',function(){ziSyncVideoPointerEvents();});
 var firstNativePlay=true,nativePaused=false;
 v.addEventListener('pause',function(){send('native-pause');nativePaused=true;});
 v.addEventListener('play',function(){
@@ -2188,27 +2250,80 @@ v.addEventListener('ratechange',function(){
 var fsInsideSlot=false;
 var ziVpaidInstance=null;
 function applyVpaidResizeAfterLayout(){
-  var vp=ziVpaidInstance;
-  if(!vp||typeof vp.resizeAd!=='function')return;
-  var full=document.fullscreenElement;
+  var full=document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement;
   var w=C.w,h=C.h,view='normal';
+  var innerFs=false,parentFs=false,mountParentFs=false;
   try{
     if(full&&outer.contains(full)){
+      innerFs=true;
       view='fullscreen';
       w=full.clientWidth||full.offsetWidth||window.innerWidth||C.w;
       h=full.clientHeight||full.offsetHeight||window.innerHeight||C.h;
+    }else if(window.parent&&window.parent!==window){
+      try{
+        var d=window.parent.document;
+        var pel=d.fullscreenElement||d.webkitFullscreenElement||d.mozFullScreenElement||d.msFullscreenElement;
+        var root=d.getElementById('player-stage-root');
+        var sw=d.getElementById('vpaid-sandbox-wrap');
+        var aw=d.getElementById('adfox-yandex-wrap');
+        if(pel&&root&&pel===root){
+          parentFs=true;
+          view='fullscreen';
+          w=window.innerWidth||C.w;
+          h=window.innerHeight||C.h;
+        }else if(pel&&((sw&&pel===sw)||(aw&&pel===aw))){
+          mountParentFs=true;
+          parentFs=true;
+          view='fullscreen';
+          w=window.innerWidth||C.w;
+          h=window.innerHeight||C.h;
+        }
+      }catch(_){}
     }
   }catch(_){}
+  try{
+    if(typeof document!=='undefined'&&document.documentElement){
+      if(mountParentFs)document.documentElement.classList.add('zi-mount-fs');
+      else document.documentElement.classList.remove('zi-mount-fs');
+    }
+  }catch(_){}
+  try{
+    if(innerFs||parentFs){
+      outer.style.width='100%';
+      outer.style.height='100%';
+    }else{
+      outer.style.width=C.w+'px';
+      outer.style.height=C.h+'px';
+    }
+  }catch(_){}
+  var vp=ziVpaidInstance;
+  if(!vp||typeof vp.resizeAd!=='function'){
+    ziEnsureVideoOnTop();
+    ziSyncVideoPointerEvents();
+    return;
+  }
   requestAnimationFrame(function(){
     try{vp.resizeAd(w,h,view);}catch(_){}
+    ziEnsureVideoOnTop();
+    ziSyncVideoPointerEvents();
   });
 }
 document.addEventListener('fullscreenchange',function(){
-  var el=document.fullscreenElement;
+  var el=document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement;
   var inFs=!!(el&&outer.contains(el));
   if(inFs&&!fsInsideSlot){fsInsideSlot=true;send('native-fs-enter');}
   if(!inFs&&fsInsideSlot){fsInsideSlot=false;send('native-fs-exit');}
   setTimeout(applyVpaidResizeAfterLayout,inFs?0:60);
+});
+window.addEventListener('message',function(ev){
+  try{
+    var d=ev.data;
+    if(!d||d.type!=='zi-chk-parent-layout')return;
+    setTimeout(applyVpaidResizeAfterLayout,0);
+  }catch(_){}
+});
+window.addEventListener('resize',function(){
+  setTimeout(applyVpaidResizeAfterLayout,48);
 });
 var env={slot:uiRoot,videoSlot:v,videoSlotCanAutoPlay:function(){return true;}};
 var playbackStarted=false;
@@ -2414,6 +2529,8 @@ async function fetchJavascriptViaProxyAsBlobUrl(scriptUrl) {
 
 /** @type {Array<{ mode: 'vpaid-sandbox'|'vpaid-yandex'|'html'|'vpaid-js', file: object, label: string }>} */
 let vpaidInteractiveList = [];
+/** Защита от повторного старта отложенной загрузки VPAID (двойной клик по Click / кнопке). */
+let vpaidDeferredLoadInFlight = false;
 
 /**
  * MP4 из vpaid.js уже идёт в верхний плеер — автоматический startAd в iframe дублирует сценарий
@@ -2438,6 +2555,21 @@ function shouldUseYandexAdSdkForVpaid(/** @type {{ url?: string }} */ file, /** 
   return false;
 }
 
+/** Активная область VPAID (Yandex или iframe-песочница), если она видима. */
+function getActiveVpaidMountElement() {
+  if (!vpaidPanel || vpaidPanel.classList.contains('hidden')) return null;
+  if (!adfoxYandexWrap.classList.contains('hidden') && adfoxYandexWrap.getAttribute('aria-hidden') !== 'true')
+    return adfoxYandexWrap;
+  if (!vpaidSandboxWrap.classList.contains('hidden') && vpaidSandboxWrap.getAttribute('aria-hidden') !== 'true')
+    return vpaidSandboxWrap;
+  return null;
+}
+
+function refreshVpaidMountFullscreenBtn() {
+  if (!vpaidMountFullscreenBtn) return;
+  vpaidMountFullscreenBtn.disabled = !getActiveVpaidMountElement();
+}
+
 function clearVpaidSandbox() {
   destroyYandexAdPlayback();
   adfoxYandexWrap.classList.add('hidden');
@@ -2451,10 +2583,12 @@ function clearVpaidSandbox() {
   } catch { /* ignore */ }
   vpaidSandboxWrap.classList.add('hidden');
   vpaidSandboxWrap.setAttribute('aria-hidden', 'true');
+  refreshVpaidMountFullscreenBtn();
 }
 
 function setupVpaidPanel(data, opts = {}) {
   const forceLoadInteractive = !!(opts && opts.forceLoadInteractive);
+  vpaidDeferredLoadInFlight = false;
   vpaidInteractiveList = [];
   const { vpaidFiles, interactives } = getMediaBuckets(data.mediaFiles);
   vpaidFiles.forEach((f) => {
@@ -2482,16 +2616,19 @@ function setupVpaidPanel(data, opts = {}) {
     vpaidPanel.classList.add('hidden');
     clearVpaidSandbox();
     if (vpaidDeferredLoadRow) vpaidDeferredLoadRow.classList.add('hidden');
+    refreshVpaidMountFullscreenBtn();
     return;
   }
 
   vpaidPanel.classList.remove('hidden');
   clearVpaidSandbox();
+  refreshVpaidMountFullscreenBtn();
 
   const deferInteractive = !forceLoadInteractive && shouldDeferVpaidInteractiveLoad(data);
   if (deferInteractive) {
     vpaidStatus.textContent = 'Линейное видео — в плеере выше (по умолчанию на паузе). Полный VPAID с баннером и кнопкой «Продолжить» не загружается, пока вы не нажмёте кнопку — воспроизведение сверху остаётся отдельным.';
     if (vpaidDeferredLoadRow) vpaidDeferredLoadRow.classList.remove('hidden');
+    refreshVpaidMountFullscreenBtn();
     return;
   }
   if (vpaidDeferredLoadRow) vpaidDeferredLoadRow.classList.add('hidden');
@@ -2537,6 +2674,7 @@ async function retryVpaidLoadViaProxy() {
 }
 
 async function loadVpaidIntoSandbox() {
+  try {
   const item = vpaidInteractiveList[0];
   if (!item) return;
   if (item.mode === 'vpaid-yandex') {
@@ -2608,6 +2746,9 @@ async function loadVpaidIntoSandbox() {
 
   vpaidSandboxFrame.srcdoc = buildVpaidSrcdoc(scriptUrlForIframe, w, h, cd);
   vpaidStatus.textContent = 'Загрузка VPAID (JS) в песочницу…';
+  } finally {
+    refreshVpaidMountFullscreenBtn();
+  }
 }
 
 function onVpaidSandboxMessage(/** @type {MessageEvent} */ e) {
@@ -2745,6 +2886,8 @@ const ctrlClick      = chk$('ctrl-click');
 const ctrlFullscreen = chk$('ctrl-fullscreen');
 const vpaidNote      = chk$('player-vpaid-note');
 const feedClearBtn   = chk$('player-feed-clear');
+const playerStageRoot = chk$('player-stage-root');
+const playerMainStack = chk$('player-main-stack');
 const playerVideoWrap = chk$('player-video-wrap');
 const playerSourceSelect = /** @type {HTMLSelectElement} */ (chk$('player-source-select'));
 const playerSourceLabel = chk$('player-source-label');
@@ -2755,6 +2898,137 @@ const ctrlCaptions   = chk$('ctrl-captions');
 const ctrlPlaybackRate = /** @type {HTMLSelectElement|null} */ (document.getElementById('ctrl-playback-rate'));
 
 const CHK_VPAID_NOTE_DISMISS_KEY = 'zi-chk-vpaid-note-dismissed';
+
+/** Элемент в полноэкранном режиме (стандарт + webkit/moz/ms). */
+function getDocumentFullscreenElement() {
+  const d = document;
+  return d.fullscreenElement
+    || d.webkitFullscreenElement
+    || d.mozFullScreenElement
+    || d.msFullscreenElement
+    || null;
+}
+
+function enterElementFullscreen(/** @type {HTMLElement} */ el) {
+  const req = el.requestFullscreen
+    || el.webkitRequestFullscreen
+    || el.webkitRequestFullScreen
+    || el.mozRequestFullScreen
+    || el.msRequestFullscreen;
+  if (!req) return Promise.reject(new Error('Fullscreen API недоступен'));
+  return Promise.resolve(req.call(el));
+}
+
+/** Полноэкран только основного плеера (chk-video + прогресс + тулбар), без панели VPAID / стороннего video. */
+function enterChkMainPlayerFullscreen() {
+  return enterElementFullscreen(playerMainStack);
+}
+
+function exitDocumentFullscreen() {
+  const d = document;
+  const exit = d.exitFullscreen
+    || d.webkitExitFullscreen
+    || d.webkitCancelFullScreen
+    || d.mozCancelFullScreen
+    || d.msExitFullscreen;
+  if (!exit) return Promise.resolve();
+  return Promise.resolve(exit.call(d)).catch(() => {});
+}
+
+/** Песочница VPAID не получает document.fullscreenElement родителя — дергаем resize после смены layout. */
+function notifyVpaidIframeParentLayout() {
+  try {
+    if (vpaidSandboxWrap.classList.contains('hidden')) return;
+    const cw = vpaidSandboxFrame.contentWindow;
+    if (!cw) return;
+    cw.postMessage({ type: 'zi-chk-parent-layout' }, '*');
+  } catch { /* ignore */ }
+}
+
+/** Сброс inline-метрик fullscreen (ниже — правка под innerWidth/innerHeight). */
+function clearZiChkMainPlayerFullscreenMetrics() {
+  const propsStack = ['width', 'min-height', 'height', 'max-height', 'display', 'flex-direction', 'box-sizing'];
+  const propsWrap = ['flex', 'min-height', 'max-height', 'width', 'height'];
+  const propsVid = ['width', 'min-height', 'height', 'max-height'];
+  propsStack.forEach((p) => { try { playerMainStack.style.removeProperty(p); } catch { /* ignore */ } });
+  propsWrap.forEach((p) => { try { playerVideoWrap.style.removeProperty(p); } catch { /* ignore */ } });
+  propsVid.forEach((p) => { try { video.style.removeProperty(p); } catch { /* ignore */ } });
+}
+
+/**
+ * Chromium/Edge на части конфигов дают :fullscreen высоту ≈ половины экрана при height:100vh.
+ * Жёстко выставляем размеры по innerWidth/innerHeight — как у реального вьюпорта окна.
+ */
+function applyZiChkMainPlayerFullscreenMetrics(/** @type {HTMLElement} */ fsEl) {
+  const w = `${window.innerWidth}px`;
+  const h = `${window.innerHeight}px`;
+  if (fsEl === playerMainStack) {
+    playerMainStack.style.setProperty('width', w, 'important');
+    playerMainStack.style.setProperty('min-height', h, 'important');
+    playerMainStack.style.setProperty('height', h, 'important');
+    playerMainStack.style.setProperty('max-height', 'none', 'important');
+    playerMainStack.style.setProperty('box-sizing', 'border-box', 'important');
+    playerMainStack.style.setProperty('display', 'flex', 'important');
+    playerMainStack.style.setProperty('flex-direction', 'column', 'important');
+    playerVideoWrap.style.setProperty('flex', '1 1 0', 'important');
+    playerVideoWrap.style.setProperty('min-height', '0', 'important');
+    playerVideoWrap.style.setProperty('max-height', 'none', 'important');
+    return;
+  }
+  if (fsEl === playerVideoWrap) {
+    playerVideoWrap.style.setProperty('width', w, 'important');
+    playerVideoWrap.style.setProperty('min-height', h, 'important');
+    playerVideoWrap.style.setProperty('height', h, 'important');
+    playerVideoWrap.style.setProperty('max-height', 'none', 'important');
+    playerVideoWrap.style.setProperty('box-sizing', 'border-box', 'important');
+    return;
+  }
+  if (fsEl === video) {
+    video.style.setProperty('width', w, 'important');
+    video.style.setProperty('min-height', h, 'important');
+    video.style.setProperty('height', h, 'important');
+    video.style.setProperty('max-height', 'none', 'important');
+  }
+}
+
+function syncChkPlayerFullscreenState() {
+  const el = getDocumentFullscreenElement();
+  clearZiChkMainPlayerFullscreenMetrics();
+  if (el === playerMainStack || el === playerVideoWrap || el === video) {
+    applyZiChkMainPlayerFullscreenMetrics(/** @type {HTMLElement} */ (el));
+  }
+
+  const root = playerStageRoot;
+  const inOurPlayer = Boolean(el && (
+    el === root
+    || (root.contains && root.contains(el))
+    || el === playerMainStack
+    || (playerMainStack.contains && playerMainStack.contains(el))
+    || el === playerVideoWrap
+    || el === video
+    || (playerVideoWrap.contains && playerVideoWrap.contains(el))
+    || el === adfoxYandexWrap
+    || (adfoxYandexWrap.contains && adfoxYandexWrap.contains(el))
+    || el === vpaidSandboxWrap
+    || (vpaidSandboxWrap.contains && vpaidSandboxWrap.contains(el))
+  ));
+  if (inOurPlayer) {
+    chkPlayerWasFullscreen = true;
+    notifyVpaidIframeParentLayout();
+    try {
+      window.dispatchEvent(new Event('resize'));
+    } catch { /* ignore */ }
+    return;
+  }
+  if (!el && chkPlayerWasFullscreen && vastData) {
+    chkPlayerWasFullscreen = false;
+    fireRepeat('exitFullscreen', 'Exit fullscreen');
+  }
+  notifyVpaidIframeParentLayout();
+  try {
+    window.dispatchEvent(new Event('resize'));
+  } catch { /* ignore */ }
+}
 
 function getCaptionLikeTracks() {
   if (!video.textTracks || !video.textTracks.length) return [];
@@ -3320,25 +3594,37 @@ ctrlClick.addEventListener('click', () => {
     seen.add(s);
     addFeedEntry('clickTracking', 'Click Tracking', [s]);
   }
+  startDeferredVpaidInteractiveLoad();
 });
 
 ctrlFullscreen.addEventListener('click', () => {
   fireRepeat('fullscreen', 'Fullscreen');
-  if (playerVideoWrap.requestFullscreen) playerVideoWrap.requestFullscreen().catch(() => {});
-  else if (video.requestFullscreen) video.requestFullscreen().catch(() => {});
-});
-
-document.addEventListener('fullscreenchange', () => {
-  const el = document.fullscreenElement;
-  if (el && playerVideoWrap instanceof HTMLElement
-    && (el === playerVideoWrap || el === video || playerVideoWrap.contains(el))) {
-    chkPlayerWasFullscreen = true;
+  if (getDocumentFullscreenElement()) {
+    void exitDocumentFullscreen();
     return;
   }
-  if (!el && chkPlayerWasFullscreen && vastData) {
-    chkPlayerWasFullscreen = false;
-    fireRepeat('exitFullscreen', 'Exit fullscreen');
-  }
+  enterChkMainPlayerFullscreen().catch(() => {
+    const w = playerVideoWrap;
+    const v = video;
+    const rw = w.requestFullscreen || w.webkitRequestFullscreen || w.mozRequestFullScreen || w.msRequestFullscreen;
+    if (rw) void Promise.resolve(rw.call(w)).catch(() => {});
+    else {
+      const rv = v.requestFullscreen || v.webkitRequestFullscreen || v.mozRequestFullScreen || v.msRequestFullscreen;
+      if (rv) void Promise.resolve(rv.call(v)).catch(() => {});
+    }
+  });
+});
+
+['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach((ev) => {
+  document.addEventListener(ev, syncChkPlayerFullscreenState);
+});
+
+window.addEventListener('resize', () => {
+  try {
+    const el = getDocumentFullscreenElement();
+    if (el === playerMainStack || el === playerVideoWrap || el === video)
+      applyZiChkMainPlayerFullscreenMetrics(/** @type {HTMLElement} */ (el));
+  } catch { /* ignore */ }
 });
 
 if (ctrlPlaybackRate) {
@@ -3403,6 +3689,26 @@ if (vpaidReloadBtn) {
   });
 }
 
+if (vpaidMountFullscreenBtn) {
+  vpaidMountFullscreenBtn.addEventListener('click', () => {
+    if (!vastData) return;
+    fireRepeat('fullscreen', 'Fullscreen (интерактив)');
+    const mount = getActiveVpaidMountElement();
+    if (!mount) return;
+    const fs = getDocumentFullscreenElement();
+    if (fs === mount || (mount.contains && fs && mount.contains(fs))) {
+      void exitDocumentFullscreen();
+      return;
+    }
+    void (async () => {
+      if (fs) await exitDocumentFullscreen();
+      try {
+        await enterElementFullscreen(mount);
+      } catch { /* ignore */ }
+    })();
+  });
+}
+
 if (vpaidToggleMountsBtn && vpaidInteractiveMounts) {
   vpaidToggleMountsBtn.addEventListener('click', () => {
     const collapsed = vpaidInteractiveMounts.classList.toggle('hidden');
@@ -3411,19 +3717,35 @@ if (vpaidToggleMountsBtn && vpaidInteractiveMounts) {
   });
 }
 
-if (vpaidDeferredLoadBtn) {
-  vpaidDeferredLoadBtn.addEventListener('click', () => {
-    if (vpaidDeferredLoadRow) vpaidDeferredLoadRow.classList.add('hidden');
-    vpaidStatus.textContent = 'Загрузка интерактива…';
-    setTimeout(() => {
-      void loadVpaidIntoSandbox().catch((e) => {
+/** Отложенный VPAID (MP4 сверху + скрипт): та же загрузка, что по кнопке «Загрузить интерактив VPAID». */
+function startDeferredVpaidInteractiveLoad() {
+  if (!vastData || !shouldDeferVpaidInteractiveLoad(vastData)) return;
+  if (getActiveVpaidMountElement()) return;
+  if (vpaidDeferredLoadInFlight) return;
+  if (vpaidDeferredLoadRow) vpaidDeferredLoadRow.classList.add('hidden');
+  vpaidStatus.textContent = 'Загрузка интерактива…';
+  try {
+    vpaidPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch { /* ignore */ }
+  setTimeout(() => {
+    vpaidDeferredLoadInFlight = true;
+    void loadVpaidIntoSandbox()
+      .catch((e) => {
         const s = e instanceof Error ? e.message : String(e);
         vpaidStatus.textContent = `Ошибка загрузки VPAID: ${s}`;
         if (vastData && shouldDeferVpaidInteractiveLoad(vastData) && vpaidDeferredLoadRow) {
           vpaidDeferredLoadRow.classList.remove('hidden');
         }
+      })
+      .finally(() => {
+        vpaidDeferredLoadInFlight = false;
       });
-    }, 48);
+  }, 48);
+}
+
+if (vpaidDeferredLoadBtn) {
+  vpaidDeferredLoadBtn.addEventListener('click', () => {
+    startDeferredVpaidInteractiveLoad();
   });
 }
 

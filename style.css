@@ -1405,6 +1405,20 @@ button.player-feed-clear:hover { color:var(--red); }
   flex:1;
   min-height:0;
 }
+/* Сцена: VPAID снизу отдельно от основного стека (Fullscreen кнопки разные). */
+.player-stage-root {
+  display:flex;
+  flex-direction:column;
+  flex:1 1 auto;
+  min-height:0;
+}
+/* Верхнее видео + прогресс + тулбар — без панели VPAID (кнопка fullscreen основного плеера). */
+.player-main-stack {
+  display:flex;
+  flex-direction:column;
+  flex:1 1 auto;
+  min-height:0;
+}
 .player-video-wrap {
   flex:1 1 auto; background:#000; position:relative;
   display:flex; align-items:center; justify-content:center;
@@ -1450,13 +1464,183 @@ button.player-feed-clear:hover { color:var(--red); }
 #chk-video:fullscreen,
 #chk-video:-webkit-full-screen,
 #chk-video:-moz-full-screen {
-  width:100%;
+  width:100vw !important;
   max-width:100vw;
-  height:100%;
-  max-height:100vh !important;
+  height:100vh !important;
+  min-height:100vh !important;
+  max-height:none !important;
   object-fit:contain;
   background:#000;
 }
+
+/* Полноэкранный режим: fullscreen на .player-stage-root — и тулбар внутри экрана, и VPAID делит высоту с верхним видео */
+.player-stage-root:fullscreen,
+.player-stage-root:-webkit-full-screen,
+.player-stage-root:-moz-full-screen {
+  display:flex;
+  flex-direction:column;
+  width:100%;
+  max-width:100vw;
+  height:100%;
+  max-height:none;
+  min-height:0;
+  background:#000;
+  box-sizing:border-box;
+  padding-bottom:env(safe-area-inset-bottom, 0);
+}
+.player-stage-root:fullscreen .player-video-wrap,
+.player-stage-root:-webkit-full-screen .player-video-wrap,
+.player-stage-root:-moz-full-screen .player-video-wrap {
+  order:1;
+  flex:1 1 0;
+  min-height:0;
+  max-height:none !important;
+  display:block;
+  position:relative;
+}
+.player-stage-root:fullscreen .player-video-wrap #chk-video,
+.player-stage-root:-webkit-full-screen .player-video-wrap #chk-video,
+.player-stage-root:-moz-full-screen .player-video-wrap #chk-video {
+  position:absolute;
+  inset:0;
+  width:100% !important;
+  height:100% !important;
+  max-width:none !important;
+  max-height:none !important;
+  margin:0;
+  object-fit:cover;
+}
+.player-stage-root:fullscreen #player-vpaid-panel:not(.hidden),
+.player-stage-root:-webkit-full-screen #player-vpaid-panel:not(.hidden),
+.player-stage-root:-moz-full-screen #player-vpaid-panel:not(.hidden) {
+  order:2;
+  flex:1 1 0;
+  min-height:0;
+  margin:0;
+  padding:6px 8px 8px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  border-radius:0;
+  border-width:1px 0 0;
+  background:rgba(10,12,18,.92);
+}
+.player-stage-root:fullscreen #player-vpaid-panel:not(.hidden) .vpaid-interactive-mounts,
+.player-stage-root:-webkit-full-screen #player-vpaid-panel:not(.hidden) .vpaid-interactive-mounts,
+.player-stage-root:-moz-full-screen #player-vpaid-panel:not(.hidden) .vpaid-interactive-mounts {
+  flex:1 1 0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  overflow:hidden;
+}
+.player-stage-root:fullscreen #player-vpaid-panel:not(.hidden) .adfox-yandex-wrap,
+.player-stage-root:fullscreen #player-vpaid-panel:not(.hidden) .vpaid-sandbox-wrap,
+.player-stage-root:-webkit-full-screen #player-vpaid-panel:not(.hidden) .adfox-yandex-wrap,
+.player-stage-root:-webkit-full-screen #player-vpaid-panel:not(.hidden) .vpaid-sandbox-wrap,
+.player-stage-root:-moz-full-screen #player-vpaid-panel:not(.hidden) .adfox-yandex-wrap,
+.player-stage-root:-moz-full-screen #player-vpaid-panel:not(.hidden) .vpaid-sandbox-wrap {
+  flex:1 1 0;
+  min-height:0;
+  max-height:none !important;
+  aspect-ratio:unset;
+  margin-top:0;
+}
+.player-stage-root:fullscreen #player-vpaid-panel:not(.hidden) .adfox-yandex-video-parent,
+.player-stage-root:fullscreen #player-vpaid-panel:not(.hidden) .adfox-yandex-video,
+.player-stage-root:-webkit-full-screen #player-vpaid-panel:not(.hidden) .adfox-yandex-video-parent,
+.player-stage-root:-webkit-full-screen #player-vpaid-panel:not(.hidden) .adfox-yandex-video,
+.player-stage-root:-moz-full-screen #player-vpaid-panel:not(.hidden) .adfox-yandex-video-parent,
+.player-stage-root:-moz-full-screen #player-vpaid-panel:not(.hidden) .adfox-yandex-video {
+  min-height:0 !important;
+}
+.player-stage-root:fullscreen #player-vpaid-panel:not(.hidden) .vpaid-sandbox-frame,
+.player-stage-root:-webkit-full-screen #player-vpaid-panel:not(.hidden) .vpaid-sandbox-frame,
+.player-stage-root:-moz-full-screen #player-vpaid-panel:not(.hidden) .vpaid-sandbox-frame {
+  flex:1 1 0;
+  min-height:0 !important;
+  height:100%;
+}
+.player-stage-root:fullscreen .player-progress-wrap,
+.player-stage-root:-webkit-full-screen .player-progress-wrap,
+.player-stage-root:-moz-full-screen .player-progress-wrap {
+  order:3;
+  flex-shrink:0;
+  background:rgba(0,0,0,.35);
+}
+.player-stage-root:fullscreen .player-controls,
+.player-stage-root:-webkit-full-screen .player-controls,
+.player-stage-root:-moz-full-screen .player-controls {
+  order:4;
+  flex-shrink:0;
+  border-top:1px solid rgba(255,255,255,.08);
+  padding-top:4px;
+  padding-bottom:max(4px, env(safe-area-inset-bottom, 0));
+  background:rgba(0,0,0,.55);
+}
+
+/* Полноэкран по кнопке основного плеера: только chk-video + прогресс + тулбар (VPAID остаётся на странице). */
+/* Важно: height:100% у fullscreen-элемента часто даёт не весь вьюпорт — только 100vh/100dvh заполняют экран. */
+.player-main-stack:fullscreen,
+.player-main-stack:-webkit-full-screen,
+.player-main-stack:-moz-full-screen {
+  display:flex;
+  flex-direction:column;
+  width:100vw !important;
+  max-width:100vw;
+  height:100vh !important;
+  min-height:100vh !important;
+  max-height:none;
+  background:#000;
+  box-sizing:border-box;
+  padding-bottom:env(safe-area-inset-bottom, 0);
+}
+@supports (height:100dvh) {
+  .player-main-stack:fullscreen,
+  .player-main-stack:-webkit-full-screen,
+  .player-main-stack:-moz-full-screen {
+    height:100dvh !important;
+    min-height:100dvh !important;
+  }
+}
+.player-main-stack:fullscreen .player-video-wrap,
+.player-main-stack:-webkit-full-screen .player-video-wrap,
+.player-main-stack:-moz-full-screen .player-video-wrap {
+  flex:1 1 0;
+  min-height:0;
+  max-height:none !important;
+  display:block;
+  position:relative;
+}
+.player-main-stack:fullscreen .player-video-wrap #chk-video,
+.player-main-stack:-webkit-full-screen .player-video-wrap #chk-video,
+.player-main-stack:-moz-full-screen .player-video-wrap #chk-video {
+  position:absolute;
+  inset:0;
+  width:100% !important;
+  height:100% !important;
+  max-width:none !important;
+  max-height:none !important;
+  margin:0;
+  object-fit:contain;
+}
+.player-main-stack:fullscreen .player-progress-wrap,
+.player-main-stack:-webkit-full-screen .player-progress-wrap,
+.player-main-stack:-moz-full-screen .player-progress-wrap {
+  flex-shrink:0;
+  background:rgba(0,0,0,.35);
+}
+.player-main-stack:fullscreen .player-controls,
+.player-main-stack:-webkit-full-screen .player-controls,
+.player-main-stack:-moz-full-screen .player-controls {
+  flex-shrink:0;
+  border-top:1px solid rgba(255,255,255,.08);
+  padding-top:4px;
+  padding-bottom:max(4px, env(safe-area-inset-bottom, 0));
+  background:rgba(0,0,0,.55);
+}
+
 .player-overlay {
   position:absolute; inset:0; display:flex;
   align-items:center; justify-content:center;
@@ -1595,6 +1779,70 @@ button.player-feed-clear:hover { color:var(--red); }
   border:0;
   vertical-align:top;
   background:#0a0a0f;
+}
+
+/* Fullscreen для VPAID/SIMID области (иначе остаётся "как в карточке" и вокруг чёрный фон). */
+.vpaid-sandbox-wrap:fullscreen,
+.vpaid-sandbox-wrap:-webkit-full-screen,
+.vpaid-sandbox-wrap:-moz-full-screen {
+  display:block;
+  position:relative;
+  width:100vw !important;
+  height:100vh !important;
+  max-width:100vw;
+  max-height:none !important;
+  min-height:0 !important;
+  margin:0 !important;
+  border-radius:0;
+  border:0;
+  background:#000;
+}
+.vpaid-sandbox-wrap:fullscreen .vpaid-sandbox-frame,
+.vpaid-sandbox-wrap:-webkit-full-screen .vpaid-sandbox-frame,
+.vpaid-sandbox-wrap:-moz-full-screen .vpaid-sandbox-frame {
+  position:absolute;
+  inset:0;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  background:#000;
+}
+
+/* Fullscreen для Yandex Ad SDK контейнера (VPAID может быть здесь, не в верхнем video). */
+.adfox-yandex-wrap:fullscreen,
+.adfox-yandex-wrap:-webkit-full-screen,
+.adfox-yandex-wrap:-moz-full-screen {
+  display:block;
+  position:relative;
+  width:100vw !important;
+  height:100vh !important;
+  max-width:100vw;
+  max-height:none !important;
+  min-height:0 !important;
+  margin:0 !important;
+  border-radius:0;
+  border:0;
+  background:#000;
+}
+.adfox-yandex-wrap:fullscreen .adfox-yandex-video-parent,
+.adfox-yandex-wrap:-webkit-full-screen .adfox-yandex-video-parent,
+.adfox-yandex-wrap:-moz-full-screen .adfox-yandex-video-parent {
+  position:absolute;
+  inset:0;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+}
+.adfox-yandex-wrap:fullscreen .adfox-yandex-video,
+.adfox-yandex-wrap:-webkit-full-screen .adfox-yandex-video,
+.adfox-yandex-wrap:-moz-full-screen .adfox-yandex-video {
+  position:absolute;
+  inset:0;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  object-fit:cover;
+  background:#000;
 }
 
 /* Подсказка, когда в VAST только VPAID — линейного файла нет */

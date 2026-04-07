@@ -422,6 +422,8 @@
             </div>
 
             <div class="chk-card-body">
+            <div class="player-stage-root" id="player-stage-root" role="presentation">
+            <div class="player-main-stack" id="player-main-stack">
             <div class="player-video-wrap" id="player-video-wrap" tabindex="0" role="region" aria-label="Видеоплеер. Пробел — пауза, стрелки — перемотка">
               <video id="chk-video" preload="metadata" playsinline></video>
               <div class="player-overlay" id="player-overlay">
@@ -471,21 +473,24 @@
                 <option value="2">2×</option>
               </select>
               <div class="player-ctrl-spacer"></div>
-              <button class="player-ctrl-btn" id="ctrl-fullscreen" title="Имитировать Fullscreen">
+              <button class="player-ctrl-btn" id="ctrl-fullscreen" title="На весь экран: только основной плеер ZiChecker (видео + прогресс + тулбар). Блок VPAID — кнопка «Интерактив fullscreen».">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
               </button>
               <button class="player-ctrl-btn" id="ctrl-skip" title="Имитировать Skip">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
               </button>
-              <button class="player-ctrl-btn" id="ctrl-click" title="Имитировать Click Through">
+              <button class="player-ctrl-btn" id="ctrl-click" title="Имитировать Click Through; если интерактив VPAID ещё не загружен (отложенная загрузка) — запускает его">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
               </button>
             </div>
+
+            </div><!-- /player-main-stack -->
 
             <div id="player-vpaid-panel" class="player-vpaid-panel hidden">
               <div class="player-vpaid-panel-head">
                 <span class="player-vpaid-title">VPAID / интерактив</span>
                 <div class="player-vpaid-panel-actions">
+                  <button type="button" class="btn ghost sm" id="vpaid-mount-fullscreen-btn" title="Только интерактив на весь экран (заполняет экран, без чёрных полос по краям)" disabled>Интерактив fullscreen</button>
                   <button type="button" class="btn ghost sm" id="vpaid-reload-btn" title="Перезагрузить VPAID / iframe с тем же VAST">Перезагрузить</button>
                   <button type="button" class="btn ghost sm" id="vpaid-toggle-mounts-btn" title="Скрыть или показать область iframe">Скрыть блок</button>
                 </div>
@@ -506,6 +511,8 @@
               </div>
               <div id="vpaid-status" class="player-vpaid-status" role="status"></div>
             </div>
+
+            </div><!-- /player-stage-root -->
 
             </div><!-- /chk-card-body player -->
           </div>
