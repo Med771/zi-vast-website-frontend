@@ -587,13 +587,18 @@ function renderTopbar(issues) {
 }
 
 // ─── Build URL ────────────────────────────────────────────────────────────────
+/** Как encodeURIComponent для query-части, но фигурные скобки макросов не трогаем (%7B/%7D → {/}). */
+function encodeQueryComponent(s) {
+  return encodeURIComponent(s).replace(/%7B/gi, '{').replace(/%7D/gi, '}');
+}
+
 function buildUrl(encode = false) {
   const base = baseInput.value.trim();
   const parts = params
     .filter(p => p.enabled)
     .map(p => {
-      const k = encode ? encodeURIComponent(p.key) : p.key;
-      const v = encode ? encodeURIComponent(p.value) : p.value;
+      const k = encode ? encodeQueryComponent(p.key) : p.key;
+      const v = encode ? encodeQueryComponent(p.value) : p.value;
       return `${k}=${v}`;
     });
   return parts.length ? `${base}?${parts.join('&')}` : base;
