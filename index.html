@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZiTag — Парсер VAST тегов</title>
   <link id="product-canonical" rel="canonical" href="https://zi-tech.ru/digital/zitag" />
-  <link rel="icon" href="logo.png" type="image/png" />
-  <link rel="apple-touch-icon" href="logo.png" />
+  <link rel="icon" type="image/png" href="/digital/logo.png" sizes="48x48" />
+  <link rel="icon" type="image/png" href="/digital/logo.png" sizes="32x32" />
+  <link rel="shortcut icon" type="image/png" href="/digital/logo.png" />
+  <link rel="apple-touch-icon" href="/digital/logo.png" sizes="180x180" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="/digital/style.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css" crossorigin="anonymous" />
 </head>
 <body>
@@ -22,7 +24,7 @@
   <header class="topbar">
     <div class="topbar-left">
       <div class="logo-wrap">
-        <img src="logo.png" alt="ZiTag" width="48" height="48" class="logo" />
+        <img src="/digital/logo.png" alt="ZiTag" width="48" height="48" class="logo" />
       </div>
       <div class="brand">
         <span class="brand-name">ZiTech</span>
@@ -31,7 +33,6 @@
     </div>
 
     <div class="topbar-center">
-      <div class="topbar-center-stack">
       <div class="tab-nav-inner">
         <button class="tab-btn active" data-tab="zitag">
           <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -44,12 +45,6 @@
           <span class="tab-chip">Валидатор</span>
         </button>
         <div class="tab-indicator" id="tab-indicator"></div>
-      </div>
-      <div class="topbar-product-urls" aria-label="Страницы на zi-tech.ru">
-        <a href="https://zi-tech.ru/digital/zitag" target="_blank" rel="noopener noreferrer" class="topbar-product-url" title="ZiTag на zi-tech.ru">zi-tech.ru/digital/zitag</a>
-        <span class="topbar-product-urls-sep" aria-hidden="true">·</span>
-        <a href="https://zi-tech.ru/digital/zichecker" target="_blank" rel="noopener noreferrer" class="topbar-product-url" title="ZiChecker на zi-tech.ru">zi-tech.ru/digital/zichecker</a>
-      </div>
       </div>
     </div>
 
@@ -422,6 +417,8 @@
             </div>
 
             <div class="chk-card-body">
+            <div class="player-stage-root" id="player-stage-root" role="presentation">
+            <div class="player-main-stack" id="player-main-stack">
             <div class="player-video-wrap" id="player-video-wrap" tabindex="0" role="region" aria-label="Видеоплеер. Пробел — пауза, стрелки — перемотка">
               <video id="chk-video" preload="metadata" playsinline></video>
               <div class="player-overlay" id="player-overlay">
@@ -471,21 +468,24 @@
                 <option value="2">2×</option>
               </select>
               <div class="player-ctrl-spacer"></div>
-              <button class="player-ctrl-btn" id="ctrl-fullscreen" title="Имитировать Fullscreen">
+              <button class="player-ctrl-btn" id="ctrl-fullscreen" title="На весь экран: только основной плеер ZiChecker (видео + прогресс + тулбар). Блок VPAID — кнопка «Интерактив fullscreen».">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
               </button>
               <button class="player-ctrl-btn" id="ctrl-skip" title="Имитировать Skip">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
               </button>
-              <button class="player-ctrl-btn" id="ctrl-click" title="Имитировать Click Through">
+              <button class="player-ctrl-btn" id="ctrl-click" title="Имитировать Click Through; если интерактив VPAID ещё не загружен (отложенная загрузка) — запускает его">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
               </button>
             </div>
+
+            </div><!-- /player-main-stack -->
 
             <div id="player-vpaid-panel" class="player-vpaid-panel hidden">
               <div class="player-vpaid-panel-head">
                 <span class="player-vpaid-title">VPAID / интерактив</span>
                 <div class="player-vpaid-panel-actions">
+                  <button type="button" class="btn ghost sm" id="vpaid-mount-fullscreen-btn" title="Только интерактив на весь экран (заполняет экран, без чёрных полос по краям)" disabled>Интерактив fullscreen</button>
                   <button type="button" class="btn ghost sm" id="vpaid-reload-btn" title="Перезагрузить VPAID / iframe с тем же VAST">Перезагрузить</button>
                   <button type="button" class="btn ghost sm" id="vpaid-toggle-mounts-btn" title="Скрыть или показать область iframe">Скрыть блок</button>
                 </div>
@@ -506,6 +506,8 @@
               </div>
               <div id="vpaid-status" class="player-vpaid-status" role="status"></div>
             </div>
+
+            </div><!-- /player-stage-root -->
 
             </div><!-- /chk-card-body player -->
           </div>
@@ -779,8 +781,8 @@
   <div class="toast hidden" id="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/xml/xml.js" crossorigin="anonymous"></script>
-  <script src="ad-infra.js"></script>
-  <script src="app.js"></script>
-  <script src="checker.js"></script>
+  <script src="/digital/ad-infra.js"></script>
+  <script src="/digital/app.js"></script>
+  <script src="/digital/checker.js"></script>
 </body>
 </html>
